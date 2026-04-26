@@ -355,6 +355,11 @@
       <summary>Whether the focus follows the mouse</summary>
       <description>If true, a terminal will automatically be focused when the mouse moves over it.</description>
     </key>
+    <key name="active-terminal-color" type="s">
+      <default>'orange'</default>
+      <summary>The color of the active terminal border highlight</summary>
+      <description>The color used to draw a border around the currently active (focused) terminal. Accepts any valid CSS color value (e.g., "orange", "#ff8c00", "rgba(255,140,0,0.8)").</description>
+    </key>
     <!-- Background Image -->
     <key name="background-image" type="s">
       <default>''</default>

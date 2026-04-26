@@ -2097,12 +2097,14 @@ private:
 
     void terminalWidgetFocusIn(Widget widget) {
         trace("Terminal gained focus " ~ uuid);
+        _isFocused = true;
         lblTitle.setSensitive(true);
         bTitle.setStateFlags(StateFlags.ACTIVE, false);
         //Fire focus events so session can track which terminal last had focus
         onFocusIn.emit(this);
         // Set colors for dimPercent
         setVTEColors();
+        vte.queueDraw();
     }
 
     /**
@@ -2115,12 +2117,16 @@ private:
 
     void terminalWidgetFocusOut(Widget widget) {
         trace("Terminal lost focus " ~ uuid);
+        if (!isTerminalWidgetFocused()) {
+            _isFocused = false;
+        }
         lblTitle.setSensitive(isTerminalWidgetFocused());
         if (!isTerminalWidgetFocused()) {
             bTitle.unsetStateFlags(StateFlags.ACTIVE);
         }
         // Set colors for dimPercent
         setVTEColors();
+        vte.queueDraw();
     }
 
     // Preferences go here
@@ -2151,12 +2157,16 @@ private:
      */
     CssProvider sbProvider;
 
+    RGBA _activeBorderColor;
+    bool _isFocused = false;
+
     /**
      * Handler ID for scroll-event
      */
     gulong scrollEventHandlerId;
 
     void initColors() {
+        _activeBorderColor = new RGBA();
         vteFG = new RGBA();
         dimFG = new RGBA();
         vteBG = new RGBA();
@@ -2463,6 +2473,12 @@ private:
         case SETTINGS_PROFILE_BADGE_USE_SYSTEM_FONT_KEY, SETTINGS_PROFILE_BADGE_FONT_KEY:
             updateBadgeFont();
             break;
+        case SETTINGS_ACTIVE_TERMINAL_COLOR_KEY:
+            string colorStr = gsSettings.getString(SETTINGS_ACTIVE_TERMINAL_COLOR_KEY);
+            if (!_activeBorderColor.parse(colorStr))
+                _activeBorderColor.parse("orange");
+            vte.queueDraw();
+            break;
         default:
             break;
         }
@@ -2511,7 +2527,8 @@ private:
             SETTINGS_PROFILE_CELL_HEIGHT_SCALE_KEY,
             SETTINGS_PROFILE_CELL_WIDTH_SCALE_KEY,
             SETTINGS_PROFILE_MARGIN_KEY,
-            SETTINGS_PROFILE_BADGE_USE_SYSTEM_FONT_KEY
+            SETTINGS_PROFILE_BADGE_USE_SYSTEM_FONT_KEY,
+            SETTINGS_ACTIVE_TERMINAL_COLOR_KEY
         ];
 
         foreach (key; keys) {
@@ -3597,19 +3614,22 @@ private:
 
     enum STROKE_WIDTH = 4;
 
-    //Draw the drag hint if dragging is occurring
+    //Draw the drag hint if dragging is occurring, and active terminal border
     bool onVTEDraw(Scoped!Context cr, Widget widget) {
-        /*
-        if (dimPercent > 0) {
-            Window window = cast(Window) getToplevel();
-            bool windowActive = (window is null)?false:window.isActive();
-            if (!windowActive || (!vte.isFocus() && !rFind.isSearchEntryFocus() && !pmContext.isVisible() && !mbTitle.getPopover().isVisible())) {
-                cr.setSourceRgba(vteDimBG.red, vteDimBG.green, vteDimBG.blue, dimPercent);
-                cr.setOperator(cairo_operator_t.ATOP);
-                cr.paint();
-            }
+        if (_isFocused) {
+            cr.save();
+            double lw = 2.0;
+            cr.setOperator(cairo_operator_t.OVER);
+            cr.setSourceRgba(_activeBorderColor.red, _activeBorderColor.green, _activeBorderColor.blue,
+                _activeBorderColor.alpha > 0 ? _activeBorderColor.alpha : 1.0);
+            cr.setLineWidth(lw);
+            double w = widget.getAllocatedWidth();
+            double h = widget.getAllocatedHeight();
+            cr.rectangle(lw / 2.0, lw / 2.0, w - lw, h - lw);
+            cr.stroke();
+            cr.restore();
         }
-        */
+
         //Dragging happening?
         if (!dragInfo.isDragActive)
             return false;
