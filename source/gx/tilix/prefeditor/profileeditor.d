@@ -33,6 +33,7 @@ import gtk.ComboBoxText;
 import gtk.Dialog;
 import gtk.EditableIF;
 import gtk.Entry;
+import gtk.FileChooserButton;
 import gtk.FileChooserDialog;
 import gtk.FileFilter;
 import gtk.FontButton;
@@ -447,6 +448,91 @@ protected:
         ComboBox cbBell = createNameValueCombo([_("None"), _("Sound"), _("Icon"), _("Icon and sound")], SETTINGS_PROFILE_TERMINAL_BELL_VALUES);
         bh.bind(SETTINGS_PROFILE_TERMINAL_BELL_KEY, cbBell, "active-id", GSettingsBindFlags.DEFAULT);
         grid.attach(cbBell, 1, row, 1, 1);
+        row++;
+
+        // Custom bell sound file
+        Label lblBellSound = new Label(_("Bell sound file"));
+        lblBellSound.setHalign(GtkAlign.END);
+        grid.attach(lblBellSound, 0, row, 1, 1);
+        Box bBellSound = new Box(Orientation.HORIZONTAL, 4);
+        Entry eBellSound = new Entry();
+        eBellSound.setHexpand(true);
+        eBellSound.setPlaceholderText(_("(system default)"));
+        bh.bind(SETTINGS_PROFILE_BELL_SOUND_FILE_KEY, eBellSound, "text", GSettingsBindFlags.DEFAULT);
+        bBellSound.add(eBellSound);
+        Button btnBellSound = new Button(_("Browse…"));
+        btnBellSound.addOnClicked(delegate(Button b) {
+            FileChooserDialog fcd = new FileChooserDialog(
+                _("Choose Bell Sound"),
+                cast(Window)this.getToplevel(),
+                FileChooserAction.OPEN,
+                [_("Open"), _("Cancel")]);
+            scope(exit) fcd.destroy();
+            FileFilter ff = new FileFilter();
+            ff.addPattern("*.ogg"); ff.addPattern("*.wav"); ff.addPattern("*.mp3"); ff.addPattern("*.flac");
+            ff.setName(_("Audio Files"));
+            fcd.addFilter(ff);
+            string cur = eBellSound.getText();
+            if (cur.length > 0) fcd.setFilename(cur);
+            if (fcd.run() == ResponseType.OK) eBellSound.setText(fcd.getFilename());
+        });
+        bBellSound.add(btnBellSound);
+        Button btnBellSoundClear = new Button(_("Clear"));
+        btnBellSoundClear.addOnClicked(delegate(Button b) { eBellSound.setText(""); });
+        bBellSound.add(btnBellSoundClear);
+        grid.attach(bBellSound, 1, row, 1, 1);
+        row++;
+
+        // Custom sound for when terminal is already focused
+        Label lblBellFocusedSound = new Label(_("Bell sound (focused)"));
+        lblBellFocusedSound.setHalign(GtkAlign.END);
+        grid.attach(lblBellFocusedSound, 0, row, 1, 1);
+        Box bBellFocused = new Box(Orientation.HORIZONTAL, 4);
+        Entry eBellFocused = new Entry();
+        eBellFocused.setHexpand(true);
+        eBellFocused.setPlaceholderText(_("(same as bell sound)"));
+        bh.bind(SETTINGS_PROFILE_BELL_FOCUSED_SOUND_FILE_KEY, eBellFocused, "text", GSettingsBindFlags.DEFAULT);
+        bBellFocused.add(eBellFocused);
+        Button btnBellFocused = new Button(_("Browse…"));
+        btnBellFocused.addOnClicked(delegate(Button b) {
+            FileChooserDialog fcd = new FileChooserDialog(
+                _("Choose Bell Sound (Focused Terminal)"),
+                cast(Window)this.getToplevel(),
+                FileChooserAction.OPEN,
+                [_("Open"), _("Cancel")]);
+            scope(exit) fcd.destroy();
+            FileFilter ff = new FileFilter();
+            ff.addPattern("*.ogg"); ff.addPattern("*.wav"); ff.addPattern("*.mp3"); ff.addPattern("*.flac");
+            ff.setName(_("Audio Files"));
+            fcd.addFilter(ff);
+            string cur = eBellFocused.getText();
+            if (cur.length > 0) fcd.setFilename(cur);
+            if (fcd.run() == ResponseType.OK) eBellFocused.setText(fcd.getFilename());
+        });
+        bBellFocused.add(btnBellFocused);
+        Button btnBellFocusedClear = new Button(_("Clear"));
+        btnBellFocusedClear.addOnClicked(delegate(Button b) { eBellFocused.setText(""); });
+        bBellFocused.add(btnBellFocusedClear);
+        grid.attach(bBellFocused, 1, row, 1, 1);
+        row++;
+
+        // Fade on focus
+        Label lblFadeOnFocus = new Label(_("Fade bell on focus"));
+        lblFadeOnFocus.setHalign(GtkAlign.END);
+        grid.attach(lblFadeOnFocus, 0, row, 1, 1);
+        CheckButton cbFadeOnFocus = new CheckButton();
+        bh.bind(SETTINGS_PROFILE_BELL_FADE_ON_FOCUS_KEY, cbFadeOnFocus, "active", GSettingsBindFlags.DEFAULT);
+        grid.attach(cbFadeOnFocus, 1, row, 1, 1);
+        row++;
+
+        // Fade duration
+        Label lblFadeDuration = new Label(_("Fade duration (ms)"));
+        lblFadeDuration.setHalign(GtkAlign.END);
+        grid.attach(lblFadeDuration, 0, row, 1, 1);
+        SpinButton sbFadeDuration = new SpinButton(100.0, 5000.0, 100.0);
+        sbFadeDuration.setDigits(0);
+        bh.bind(SETTINGS_PROFILE_BELL_FADE_DURATION_KEY, sbFadeDuration, "value", GSettingsBindFlags.DEFAULT);
+        grid.attach(sbFadeDuration, 1, row, 1, 1);
         row++;
 
         add(grid);

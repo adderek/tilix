@@ -51,6 +51,7 @@ tilix_sources = [
     'source/gx/tilix/prefeditor/prefdialog.d',
     'source/gx/tilix/prefeditor/profileeditor.d',
     'source/gx/tilix/prefeditor/titleeditor.d',
+    'source/gx/tilix/terminal/bellplayer.d',
     'source/gx/tilix/terminal/actions.d',
     'source/gx/tilix/terminal/activeprocess.d',
     'source/gx/tilix/terminal/advpaste.d',
@@ -98,6 +99,7 @@ sources_dir = include_directories('source/')
 # Dependencies
 gtkd_dep = dependency('gtkd-3', version: '>=3.10.0')
 vted_dep = dependency('vted-3', version: '>=3.10.0')
+gstreamerd_dep = dependency('gstreamerd-3', required: false)
 xlib_dep = dependency('x11')
 libsecret_dep = dependency('libsecret-1', required: false)
 
@@ -110,6 +112,7 @@ executable('tilix',
     include_directories : sources_dir,
     dependencies : [gtkd_dep,
                     vted_dep,
+                    gstreamerd_dep,
                     xlib_dep,
                     libsecret_dep],
     d_args: d_extra_args,
@@ -123,6 +126,7 @@ tilix_test_exe = executable('tilix_test',
     include_directories : [sources_dir],
     dependencies : [gtkd_dep,
                     vted_dep,
+                    gstreamerd_dep,
                     xlib_dep],
     d_args: d_extra_args,
     link_args: d_link_args,

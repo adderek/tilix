@@ -150,6 +150,7 @@ import gx.tilix.terminal.search;
 import gx.tilix.terminal.util;
 import gx.tilix.terminal.monitor;
 import gx.tilix.terminal.activeprocess;
+import gx.tilix.terminal.bellplayer;
 
 /**
 * When dragging over VTE, specifies which quandrant new terminal
@@ -297,6 +298,10 @@ private:
     bool deferShowBell;
     uint timeoutID;
 
+    // Bell sound player and persistent indicator state
+    BellPlayer _bellPlayer;
+    bool _bellPending = false;
+
     // Track when the last activity was
     long lastActivity;
     long silenceThreshold;
@@ -422,6 +427,8 @@ private:
         spBell.setTooltipText(_("Terminal bell"));
         spBell.getStyleContext().addClass("tilix-bell");
         bTitle.packEnd(spBell, false, false, 0);
+
+        _bellPlayer = new BellPlayer();
 
         EventBox evtTitle = new EventBox();
         evtTitle.add(bTitle);
@@ -1197,31 +1204,58 @@ private:
     }
 
     void showBell() {
+        deferShowBell = false;
         string value = gsProfile.getString(SETTINGS_PROFILE_TERMINAL_BELL_KEY);
-        if (value == SETTINGS_PROFILE_TERMINAL_BELL_ICON_VALUE || value == SETTINGS_PROFILE_TERMINAL_BELL_ICON_SOUND_VALUE) {
+        bool doIcon = value == SETTINGS_PROFILE_TERMINAL_BELL_ICON_VALUE || value == SETTINGS_PROFILE_TERMINAL_BELL_ICON_SOUND_VALUE;
+        bool doSound = value == SETTINGS_PROFILE_TERMINAL_BELL_SOUND_VALUE || value == SETTINGS_PROFILE_TERMINAL_BELL_ICON_SOUND_VALUE;
+
+        // Set pending flag for unfocused terminals to drive the amber frame indicator
+        if (!_isFocused) {
+            _bellPending = true;
+            vte.queueDraw();
+        }
+
+        if (doIcon) {
             if (!spBell.getVisible()) {
                 spBell.show();
                 spBell.start();
-                if (timeoutID > 0) {
-                    g_source_remove(timeoutID);
-                    timeoutID = 0;
-                }
-                timeoutID = g_timeout_add(5000, cast(GSourceFunc)&timeoutCallback, cast(void*)this);
             }
             bellStart = Clock.currStdTime();
+            // spBell now persists until terminal is focused; no auto-hide timeout
+        }
+
+        if (doSound) {
+            string soundFile = gsProfile.getString(SETTINGS_PROFILE_BELL_SOUND_FILE_KEY);
+            if (soundFile.length > 0) {
+                // Use custom sound; pick focused-specific file if terminal is focused
+                if (_isFocused) {
+                    string focusedFile = gsProfile.getString(SETTINGS_PROFILE_BELL_FOCUSED_SOUND_FILE_KEY);
+                    if (focusedFile.length > 0) soundFile = focusedFile;
+                }
+                _bellPlayer.play(soundFile);
+            }
+            // When no custom file, VTE's audible bell handles system beep (see applyPreference)
         }
     }
 
-	extern(C) static bool timeoutCallback(Terminal terminal) {
-        tracef("Current Time=%d, bellstart=%d, expired=%d", Clock.currStdTime(), terminal.bellStart, (terminal.bellStart + 5 * 1000 * 1000));
-        if (Clock.currStdTime() >= terminal.bellStart + (5 * 1000 * 1000)) {
-            trace("Timer expired, hiding Bell");
-            terminal.spBell.stop();
-            terminal.spBell.hide();
-            terminal.timeoutID = 0;
-            return false;
+    // Clear bell pending state and optionally fade/stop bell sound when terminal gains focus
+    void clearBellPending() {
+        if (!_bellPending && !_bellPlayer.isPlaying()) return;
+        _bellPending = false;
+        if (spBell.getVisible()) {
+            spBell.stop();
+            spBell.hide();
         }
-        return true;
+        if (_bellPlayer.isPlaying()) {
+            bool doFade = gsProfile.getBoolean(SETTINGS_PROFILE_BELL_FADE_ON_FOCUS_KEY);
+            if (doFade) {
+                int fadeDuration = gsProfile.getInt(SETTINGS_PROFILE_BELL_FADE_DURATION_KEY);
+                _bellPlayer.fadeOut(fadeDuration);
+            } else {
+                _bellPlayer.stop();
+            }
+        }
+        vte.queueDraw();
     }
 
     /**
@@ -2098,6 +2132,7 @@ private:
     void terminalWidgetFocusIn(Widget widget) {
         trace("Terminal gained focus " ~ uuid);
         _isFocused = true;
+        clearBellPending();
         lblTitle.setSensitive(true);
         bTitle.setStateFlags(StateFlags.ACTIVE, false);
         //Fire focus events so session can track which terminal last had focus
@@ -2243,8 +2278,12 @@ private:
 
         switch (key) {
         case SETTINGS_PROFILE_TERMINAL_BELL_KEY:
+        case SETTINGS_PROFILE_BELL_SOUND_FILE_KEY:
             string value = gsProfile.getString(SETTINGS_PROFILE_TERMINAL_BELL_KEY);
-            vte.setAudibleBell(value == SETTINGS_PROFILE_TERMINAL_BELL_SOUND_VALUE || value == SETTINGS_PROFILE_TERMINAL_BELL_ICON_SOUND_VALUE);
+            bool wantSound = value == SETTINGS_PROFILE_TERMINAL_BELL_SOUND_VALUE || value == SETTINGS_PROFILE_TERMINAL_BELL_ICON_SOUND_VALUE;
+            // Disable VTE's audible bell when custom sound file is configured so we control playback
+            string customFile = gsProfile.getString(SETTINGS_PROFILE_BELL_SOUND_FILE_KEY);
+            vte.setAudibleBell(wantSound && customFile.length == 0);
             break;
         case SETTINGS_PROFILE_ALLOW_BOLD_KEY:
             vte.setAllowBold(gsProfile.getBoolean(SETTINGS_PROFILE_ALLOW_BOLD_KEY));
@@ -3622,6 +3661,22 @@ private:
             cr.setOperator(cairo_operator_t.OVER);
             cr.setSourceRgba(_activeBorderColor.red, _activeBorderColor.green, _activeBorderColor.blue,
                 _activeBorderColor.alpha > 0 ? _activeBorderColor.alpha : 1.0);
+            cr.setLineWidth(lw);
+            double w = widget.getAllocatedWidth();
+            double h = widget.getAllocatedHeight();
+            double margin = 1.0;
+            double offset = lw / 2.0 + margin;
+            cr.rectangle(offset, offset, w - lw - margin * 2, h - lw - margin * 2);
+            cr.stroke();
+            cr.restore();
+        }
+
+        // Amber frame to indicate unfocused terminal has a pending bell
+        if (_bellPending && !_isFocused) {
+            cr.save();
+            double lw = 3.0;
+            cr.setOperator(cairo_operator_t.OVER);
+            cr.setSourceRgba(1.0, 0.55, 0.0, 0.9);
             cr.setLineWidth(lw);
             double w = widget.getAllocatedWidth();
             double h = widget.getAllocatedHeight();

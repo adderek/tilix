@@ -612,6 +612,27 @@
       <summary>What to do when a bell signal is emitted in a terminal</summary>
       <description>Determines whether to do nothing, play a sound, show an icon or do both when a bell signal is emitted.</description>
     </key>
+    <key name="bell-sound-file" type="s">
+      <default>''</default>
+      <summary>Custom sound file for terminal bell</summary>
+      <description>Path to a sound file to play instead of the system beep when a bell signal is emitted. Leave empty to use the system default.</description>
+    </key>
+    <key name="bell-focused-sound-file" type="s">
+      <default>''</default>
+      <summary>Custom sound file for bell when terminal is focused</summary>
+      <description>Path to a sound file to play when a bell signal is emitted and the terminal is already focused. Leave empty to use the same file as bell-sound-file.</description>
+    </key>
+    <key name="bell-fade-on-focus" type="b">
+      <default>true</default>
+      <summary>Fade bell sound when terminal gains focus</summary>
+      <description>If true, the bell sound will fade out when the terminal gains focus instead of stopping abruptly.</description>
+    </key>
+    <key name="bell-fade-duration" type="i">
+      <default>1000</default>
+      <range min="100" max="5000"/>
+      <summary>Bell sound fade duration in milliseconds</summary>
+      <description>Duration in milliseconds over which the bell sound fades to silence when the terminal gains focus.</description>
+    </key>
     <key name="allow-bold" type="b">
       <default>true</default>
       <summary>Whether to allow bold text</summary>
