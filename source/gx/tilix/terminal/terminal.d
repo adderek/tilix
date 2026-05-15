@@ -3625,7 +3625,9 @@ private:
             cr.setLineWidth(lw);
             double w = widget.getAllocatedWidth();
             double h = widget.getAllocatedHeight();
-            cr.rectangle(lw / 2.0, lw / 2.0, w - lw, h - lw);
+            double margin = 1.0;
+            double offset = lw / 2.0 + margin;
+            cr.rectangle(offset, offset, w - lw - margin * 2, h - lw - margin * 2);
             cr.stroke();
             cr.restore();
         }
