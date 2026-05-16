@@ -302,6 +302,9 @@ private:
     BellPlayer _bellPlayer;
     bool _bellPending = false;
 
+    // OSC 777 tilix-bell message badge (title bar label)
+    Label _lblBellMsg;
+
     // Track when the last activity was
     long lastActivity;
     long silenceThreshold;
@@ -427,6 +430,14 @@ private:
         spBell.setTooltipText(_("Terminal bell"));
         spBell.getStyleContext().addClass("tilix-bell");
         bTitle.packEnd(spBell, false, false, 0);
+
+        // OSC 777 message badge label
+        _lblBellMsg = new Label("");
+        _lblBellMsg.setNoShowAll(true);
+        _lblBellMsg.setEllipsize(PangoEllipsizeMode.END);
+        _lblBellMsg.setMaxWidthChars(40);
+        _lblBellMsg.getStyleContext().addClass("tilix-bell-msg");
+        bTitle.packEnd(_lblBellMsg, false, false, 4);
 
         _bellPlayer = new BellPlayer();
 
@@ -924,6 +935,12 @@ private:
             }
         });
 
+        vte.addOnTilixBell(delegate(string params, VTE) {
+            if (vte.getMapped()) {
+                onTilixBell(params);
+            }
+        });
+
         vteHandlers ~= vte.addOnWindowTitleChanged(delegate(VTE terminal) {
             if (vte !is null) {
                 trace("Window title changed");
@@ -1246,8 +1263,8 @@ private:
                 }
                 _bellPlayer.play(soundFile);
                 // Fade out quickly when terminal is already focused
-                if (_isFocused && gsProfile.getBoolean(SETTINGS_PROFILE_BELL_FADE_ON_FOCUS_KEY)) {
-                    int fadeDuration = gsProfile.getInt(SETTINGS_PROFILE_BELL_FADE_DURATION_KEY);
+                if (_isFocused && gsProfile.getBoolean(SETTINGS_PROFILE_BELL_FADE_WHEN_FOCUSED_KEY)) {
+                    int fadeDuration = gsProfile.getInt(SETTINGS_PROFILE_BELL_FOCUSED_FADE_DURATION_KEY);
                     _bellPlayer.fadeOut(fadeDuration);
                 }
             }
@@ -1257,11 +1274,14 @@ private:
 
     // Clear bell pending state and optionally fade/stop bell sound when terminal gains focus
     void clearBellPending() {
-        if (!_bellPending && !_bellPlayer.isPlaying()) return;
+        if (!_bellPending && !_bellPlayer.isPlaying() && !_lblBellMsg.getVisible()) return;
         _bellPending = false;
         if (spBell.getVisible()) {
             spBell.stop();
             spBell.hide();
+        }
+        if (_lblBellMsg.getVisible()) {
+            _lblBellMsg.hide();
         }
         if (_bellPlayer.isPlaying()) {
             bool doFade = gsProfile.getBoolean(SETTINGS_PROFILE_BELL_FADE_ON_FOCUS_KEY);
@@ -1273,6 +1293,82 @@ private:
             }
         }
         vte.queueDraw();
+    }
+
+    // Handle OSC 777 ; tilix-bell ; params BEL
+    // params format: "level[;fade=ms][;msg=text]"
+    void onTilixBell(string params) {
+        import std.conv : to;
+
+        // Parse level and key=value pairs
+        string[] parts = params.split(";");
+        string level = (parts.length > 0 && parts[0].length > 0) ? parts[0] : "info";
+        int fadeOverride = -1;
+        string msg = "";
+
+        foreach (part; parts[1 .. $]) {
+            auto idx = part.indexOf("=");
+            if (idx < 0) continue;
+            string key = part[0 .. idx];
+            string val = part[idx + 1 .. $];
+            switch (key) {
+                case "fade": try { fadeOverride = val.to!int; } catch (Exception) {} break;
+                case "msg":  msg = val; break;
+                default: break;
+            }
+        }
+
+        // Determine per-level sound key, fall back to regular bell sound
+        string soundKey;
+        switch (level) {
+            case "warning": soundKey = SETTINGS_PROFILE_OSC777_WARNING_SOUND_KEY; break;
+            case "error":   soundKey = SETTINGS_PROFILE_OSC777_ERROR_SOUND_KEY;   break;
+            case "success": soundKey = SETTINGS_PROFILE_OSC777_SUCCESS_SOUND_KEY; break;
+            default:        soundKey = SETTINGS_PROFILE_OSC777_INFO_SOUND_KEY;    break;
+        }
+
+        string value = gsProfile.getString(SETTINGS_PROFILE_TERMINAL_BELL_KEY);
+        bool doIcon  = value == SETTINGS_PROFILE_TERMINAL_BELL_ICON_VALUE  || value == SETTINGS_PROFILE_TERMINAL_BELL_ICON_SOUND_VALUE;
+        bool doSound = value == SETTINGS_PROFILE_TERMINAL_BELL_SOUND_VALUE || value == SETTINGS_PROFILE_TERMINAL_BELL_ICON_SOUND_VALUE;
+
+        if (!_isFocused) {
+            _bellPending = true;
+            vte.queueDraw();
+        }
+
+        if (doIcon) {
+            if (!spBell.getVisible()) {
+                spBell.show();
+                spBell.start();
+            }
+            bellStart = Clock.currStdTime();
+        }
+
+        if (doSound) {
+            string soundFile = gsProfile.getString(soundKey);
+            if (soundFile.length == 0)
+                soundFile = gsProfile.getString(SETTINGS_PROFILE_BELL_SOUND_FILE_KEY);
+            if (soundFile.length > 0) {
+                _bellPlayer.play(soundFile);
+                if (_isFocused && gsProfile.getBoolean(SETTINGS_PROFILE_BELL_FADE_WHEN_FOCUSED_KEY)) {
+                    int fd = (fadeOverride >= 0) ? fadeOverride : gsProfile.getInt(SETTINGS_PROFILE_BELL_FOCUSED_FADE_DURATION_KEY);
+                    _bellPlayer.fadeOut(fd);
+                }
+            }
+        }
+
+        // Message badge in title bar
+        if (msg.length > 0 && gsProfile.getBoolean(SETTINGS_PROFILE_OSC777_BADGE_ENABLED_KEY)) {
+            _lblBellMsg.setText(msg);
+            _lblBellMsg.setTooltipText(msg);
+            if (!_lblBellMsg.getVisible())
+                _lblBellMsg.show();
+        }
+
+        // Desktop notification (only when not focused)
+        if (msg.length > 0 && !_isFocused && gsProfile.getBoolean(SETTINGS_PROFILE_OSC777_SYSTEM_NOTIFY_KEY)) {
+            notifyProcessNotification(format("[%s]", level), msg, uuid);
+        }
     }
 
     /**

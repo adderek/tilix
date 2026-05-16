@@ -536,7 +536,7 @@ protected:
         grid.attach(cbFadeOnFocus, 1, row, 1, 1);
         row++;
 
-        // Fade duration
+        // Fade duration (unfocused → focused)
         Label lblFadeDuration = new Label(_("Fade duration (ms)"));
         lblFadeDuration.setHalign(GtkAlign.END);
         grid.attach(lblFadeDuration, 0, row, 1, 1);
@@ -544,6 +544,89 @@ protected:
         sbFadeDuration.setDigits(0);
         bh.bind(SETTINGS_PROFILE_BELL_FADE_DURATION_KEY, sbFadeDuration, "value", GSettingsBindFlags.DEFAULT);
         grid.attach(sbFadeDuration, 1, row, 1, 1);
+        row++;
+
+        // Fade when already focused
+        Label lblFadeWhenFocused = new Label(_("Fade bell when terminal is focused"));
+        lblFadeWhenFocused.setHalign(GtkAlign.END);
+        grid.attach(lblFadeWhenFocused, 0, row, 1, 1);
+        CheckButton cbFadeWhenFocused = new CheckButton();
+        bh.bind(SETTINGS_PROFILE_BELL_FADE_WHEN_FOCUSED_KEY, cbFadeWhenFocused, "active", GSettingsBindFlags.DEFAULT);
+        grid.attach(cbFadeWhenFocused, 1, row, 1, 1);
+        row++;
+
+        // Focused fade duration
+        Label lblFocusedFadeDuration = new Label(_("Focused fade duration (ms)"));
+        lblFocusedFadeDuration.setHalign(GtkAlign.END);
+        grid.attach(lblFocusedFadeDuration, 0, row, 1, 1);
+        SpinButton sbFocusedFadeDuration = new SpinButton(50.0, 2000.0, 50.0);
+        sbFocusedFadeDuration.setDigits(0);
+        bh.bind(SETTINGS_PROFILE_BELL_FOCUSED_FADE_DURATION_KEY, sbFocusedFadeDuration, "value", GSettingsBindFlags.DEFAULT);
+        grid.attach(sbFocusedFadeDuration, 1, row, 1, 1);
+        row++;
+
+        // ── OSC 777 tilix-bell ───────────────────────────────────────────────
+        Label lblOscHeader = new Label(format("<b>%s</b>", _("OSC 777 Bell (tilix-bell)")));
+        lblOscHeader.setUseMarkup(true);
+        lblOscHeader.setHalign(GtkAlign.START);
+        grid.attach(lblOscHeader, 0, row, 2, 1);
+        row++;
+
+        // Per-level sound file helpers
+        void addOscSoundRow(string labelText, string settingKey) {
+            Label lbl = new Label(labelText);
+            lbl.setHalign(GtkAlign.END);
+            grid.attach(lbl, 0, row, 1, 1);
+            Box bSound = new Box(Orientation.HORIZONTAL, 4);
+            Entry eSound = new Entry();
+            eSound.setHexpand(true);
+            bh.bind(settingKey, eSound, "text", GSettingsBindFlags.DEFAULT);
+            bSound.add(eSound);
+            Button btnPick = new Button(_("Browse"));
+            btnPick.addOnClicked(delegate(Button) {
+                FileChooserDialog fcd = new FileChooserDialog(
+                    _("Choose Bell Sound"),
+                    cast(Window)this.getToplevel(),
+                    FileChooserAction.OPEN,
+                    [_("Open"), _("Cancel")]);
+                scope(exit) fcd.destroy();
+                FileFilter ff = new FileFilter();
+                ff.addPattern("*.ogg"); ff.addPattern("*.wav"); ff.addPattern("*.mp3"); ff.addPattern("*.flac");
+                ff.setName(_("Audio Files"));
+                fcd.addFilter(ff);
+                string cur = eSound.getText();
+                if (cur.length > 0) fcd.setFilename(cur);
+                if (fcd.run() == ResponseType.OK) eSound.setText(fcd.getFilename());
+            });
+            bSound.add(btnPick);
+            Button btnClear = new Button(_("Clear"));
+            btnClear.addOnClicked(delegate(Button) { eSound.setText(""); });
+            bSound.add(btnClear);
+            grid.attach(bSound, 1, row, 1, 1);
+            row++;
+        }
+
+        addOscSoundRow(_("Info sound"), SETTINGS_PROFILE_OSC777_INFO_SOUND_KEY);
+        addOscSoundRow(_("Warning sound"), SETTINGS_PROFILE_OSC777_WARNING_SOUND_KEY);
+        addOscSoundRow(_("Error sound"), SETTINGS_PROFILE_OSC777_ERROR_SOUND_KEY);
+        addOscSoundRow(_("Success sound"), SETTINGS_PROFILE_OSC777_SUCCESS_SOUND_KEY);
+
+        // Badge enabled
+        Label lblBadge = new Label(_("Show message badge in title bar"));
+        lblBadge.setHalign(GtkAlign.END);
+        grid.attach(lblBadge, 0, row, 1, 1);
+        CheckButton cbBadge = new CheckButton();
+        bh.bind(SETTINGS_PROFILE_OSC777_BADGE_ENABLED_KEY, cbBadge, "active", GSettingsBindFlags.DEFAULT);
+        grid.attach(cbBadge, 1, row, 1, 1);
+        row++;
+
+        // System notify
+        Label lblSysNotify = new Label(_("Send message to desktop notifications"));
+        lblSysNotify.setHalign(GtkAlign.END);
+        grid.attach(lblSysNotify, 0, row, 1, 1);
+        CheckButton cbSysNotify = new CheckButton();
+        bh.bind(SETTINGS_PROFILE_OSC777_SYSTEM_NOTIFY_KEY, cbSysNotify, "active", GSettingsBindFlags.DEFAULT);
+        grid.attach(cbSysNotify, 1, row, 1, 1);
         row++;
 
         add(grid);

@@ -176,6 +176,15 @@ enum SETTINGS_PROFILE_BELL_SOUND_FILE_KEY = "bell-sound-file";
 enum SETTINGS_PROFILE_BELL_FOCUSED_SOUND_FILE_KEY = "bell-focused-sound-file";
 enum SETTINGS_PROFILE_BELL_FADE_ON_FOCUS_KEY = "bell-fade-on-focus";
 enum SETTINGS_PROFILE_BELL_FADE_DURATION_KEY = "bell-fade-duration";
+enum SETTINGS_PROFILE_BELL_FADE_WHEN_FOCUSED_KEY = "bell-fade-when-focused";
+enum SETTINGS_PROFILE_BELL_FOCUSED_FADE_DURATION_KEY = "bell-focused-fade-duration";
+
+enum SETTINGS_PROFILE_OSC777_INFO_SOUND_KEY = "osc777-info-sound";
+enum SETTINGS_PROFILE_OSC777_WARNING_SOUND_KEY = "osc777-warning-sound";
+enum SETTINGS_PROFILE_OSC777_ERROR_SOUND_KEY = "osc777-error-sound";
+enum SETTINGS_PROFILE_OSC777_SUCCESS_SOUND_KEY = "osc777-success-sound";
+enum SETTINGS_PROFILE_OSC777_BADGE_ENABLED_KEY = "osc777-badge-enabled";
+enum SETTINGS_PROFILE_OSC777_SYSTEM_NOTIFY_KEY = "osc777-system-notify";
 
 enum SETTINGS_PROFILE_SIZE_COLUMNS_KEY = "default-size-columns";
 enum SETTINGS_PROFILE_SIZE_ROWS_KEY = "default-size-rows";

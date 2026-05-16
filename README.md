@@ -1,3 +1,9 @@
+# Tilix fork by adderek
+Why? My own patches:
+* frame around active terminal
+* custom BEL sound (this is normally handled by VTE)
+* and custom commands ESC]777 for custom sounds/notifications, thus VTE needs change :( project would degrade over time unless maintained
+
 ![Build Status](https://github.com/gnunn1/tilix/workflows/Build%20Test/badge.svg)
 [![Translation status](https://hosted.weblate.org/widgets/tilix/-/svg-badge.svg)](https://hosted.weblate.org/engage/tilix/?utm_source=widget)
 # Tilix

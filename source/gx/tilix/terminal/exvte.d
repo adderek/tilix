@@ -63,6 +63,61 @@ public:
         }
     }
 
+	protected class OnTilixBellDelegateWrapper
+	{
+		void delegate(string, Terminal) dlg;
+		gulong handlerId;
+		ConnectFlags flags;
+		this(void delegate(string, Terminal) dlg, gulong handlerId, ConnectFlags flags)
+		{
+			this.dlg = dlg;
+			this.handlerId = handlerId;
+			this.flags = flags;
+		}
+	}
+	protected OnTilixBellDelegateWrapper[] onTilixBellListeners;
+
+	/**
+	 * Emitted when OSC 777 ; tilix-bell ; params BEL is received.
+	 * params format: "level[;fade=ms][;msg=text]"
+	 * level: info | warning | error | success
+	 */
+	gulong addOnTilixBell(void delegate(string, Terminal) dlg, ConnectFlags connectFlags=cast(ConnectFlags)0)
+	{
+		onTilixBellListeners ~= new OnTilixBellDelegateWrapper(dlg, 0, connectFlags);
+		onTilixBellListeners[onTilixBellListeners.length - 1].handlerId = Signals.connectData(
+			this,
+			"tilix-bell",
+			cast(GCallback)&callBackTilixBell,
+			cast(void*)onTilixBellListeners[onTilixBellListeners.length - 1],
+			cast(GClosureNotify)&callBackTilixBellDestroy,
+			connectFlags);
+		return onTilixBellListeners[onTilixBellListeners.length - 1].handlerId;
+	}
+
+	extern(C) static void callBackTilixBell(VteTerminal* terminalStruct, char* params, OnTilixBellDelegateWrapper wrapper)
+	{
+		wrapper.dlg(Str.toString(params), wrapper.outer);
+	}
+
+	extern(C) static void callBackTilixBellDestroy(OnTilixBellDelegateWrapper wrapper, GClosure* closure)
+	{
+		wrapper.outer.internalRemoveOnTilixBell(wrapper);
+	}
+
+	protected void internalRemoveOnTilixBell(OnTilixBellDelegateWrapper source)
+	{
+		foreach(index, wrapper; onTilixBellListeners)
+		{
+			if (wrapper.dlg == source.dlg && wrapper.flags == source.flags && wrapper.handlerId == source.handlerId)
+			{
+				onTilixBellListeners[index] = null;
+				onTilixBellListeners = std.algorithm.remove(onTilixBellListeners, index);
+				break;
+			}
+		}
+	}
+
 	protected class OnNotificationReceivedDelegateWrapper
 	{
 		void delegate(string, string, Terminal) dlg;
