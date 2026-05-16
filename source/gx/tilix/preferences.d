@@ -245,6 +245,7 @@ enum SETTINGS_PROFILE_NOTIFY_ENABLED_KEY = "notify-silence-enabled";
 enum SETTINGS_PROFILE_NOTIFY_SILENCE_THRESHOLD_KEY = "notify-silence-threshold";
 
 enum SETTINGS_PROFILE_MARGIN_KEY = "draw-margin";
+enum SETTINGS_PROFILE_TERMINAL_PADDING_KEY = "terminal-padding";
 
 //Shortcuts
 enum SETTINGS_KEY_BINDINGS_ID = "com.gexperts.Tilix.Keybindings";

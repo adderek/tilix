@@ -354,6 +354,17 @@ protected:
             row++;
         }
 
+        // Inner padding — prevents active border from obscuring text/cursor
+        Label lblPadding = new Label(_("Terminal padding (px)"));
+        lblPadding.setHalign(GtkAlign.END);
+        grid.attach(lblPadding, 0, row, 1, 1);
+        SpinButton sbPadding = new SpinButton(0.0, 20.0, 1.0);
+        sbPadding.setDigits(0);
+        sbPadding.setTooltipText(_("Inner padding between terminal border and content. Prevents the active/bell frame from covering text or the cursor."));
+        bh.bind(SETTINGS_PROFILE_TERMINAL_PADDING_KEY, sbPadding, "value", GSettingsBindFlags.DEFAULT);
+        grid.attach(sbPadding, 1, row, 1, 1);
+        row++;
+
         if (checkVTEVersion(VTE_VERSION_TEXT_BLINK_MODE)) {
             //Text Blink Mode
             Label lblTextBlinkMode = new Label(_("Text blink mode"));

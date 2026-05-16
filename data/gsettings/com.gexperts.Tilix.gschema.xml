@@ -661,6 +661,12 @@
       <summary>Draws a margin line at the column specified</summary>
       <description>Draws a margin line at the column specified, 0 indicates no margin.</description>
     </key>
+    <key name="terminal-padding" type="i">
+      <range min="0" max="20"/>
+      <default>2</default>
+      <summary>Inner padding around terminal content in pixels</summary>
+      <description>Adds padding between the terminal frame/border and the terminal content, preventing the active border from obscuring text or the cursor.</description>
+    </key>
     <!--Transparency-->
     <key name="background-transparency-percent" type="i">
       <range min="0" max="100" />

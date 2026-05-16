@@ -1203,6 +1203,18 @@ private:
         return _synchronizeInput && _synchronizeInputOverride;
     }
 
+    void applyTerminalPadding() {
+        if (vte is null) return;
+        int pad = gsProfile.getInt(SETTINGS_PROFILE_TERMINAL_PADDING_KEY);
+        if (_paddingProvider !is null) {
+            vte.getStyleContext().removeProvider(_paddingProvider);
+        }
+        _paddingProvider = new CssProvider();
+        import std.format : format;
+        _paddingProvider.loadFromData(format("vte-terminal { padding: %dpx; }", pad));
+        vte.getStyleContext().addProvider(_paddingProvider, ProviderPriority.APPLICATION);
+    }
+
     void showBell() {
         deferShowBell = false;
         string value = gsProfile.getString(SETTINGS_PROFILE_TERMINAL_BELL_KEY);
@@ -1233,6 +1245,11 @@ private:
                     if (focusedFile.length > 0) soundFile = focusedFile;
                 }
                 _bellPlayer.play(soundFile);
+                // Fade out quickly when terminal is already focused
+                if (_isFocused && gsProfile.getBoolean(SETTINGS_PROFILE_BELL_FADE_ON_FOCUS_KEY)) {
+                    int fadeDuration = gsProfile.getInt(SETTINGS_PROFILE_BELL_FADE_DURATION_KEY);
+                    _bellPlayer.fadeOut(fadeDuration);
+                }
             }
             // When no custom file, VTE's audible bell handles system beep (see applyPreference)
         }
@@ -2191,6 +2208,7 @@ private:
      * CSSProvider to enhance terminal scrollbar
      */
     CssProvider sbProvider;
+    CssProvider _paddingProvider;
 
     RGBA _activeBorderColor;
     bool _isFocused = false;
@@ -2509,6 +2527,9 @@ private:
                 vte.queueDraw();
             }
             break;
+        case SETTINGS_PROFILE_TERMINAL_PADDING_KEY:
+            applyTerminalPadding();
+            break;
         case SETTINGS_PROFILE_BADGE_USE_SYSTEM_FONT_KEY, SETTINGS_PROFILE_BADGE_FONT_KEY:
             updateBadgeFont();
             break;
@@ -2566,6 +2587,7 @@ private:
             SETTINGS_PROFILE_CELL_HEIGHT_SCALE_KEY,
             SETTINGS_PROFILE_CELL_WIDTH_SCALE_KEY,
             SETTINGS_PROFILE_MARGIN_KEY,
+            SETTINGS_PROFILE_TERMINAL_PADDING_KEY,
             SETTINGS_PROFILE_BADGE_USE_SYSTEM_FONT_KEY,
             SETTINGS_ACTIVE_TERMINAL_COLOR_KEY
         ];
