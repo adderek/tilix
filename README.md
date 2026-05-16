@@ -4,6 +4,10 @@ Why? My own patches:
 * custom BEL sound (this is normally handled by VTE)
 * and custom commands ESC]777 for custom sounds/notifications, thus VTE needs change :( project would degrade over time unless maintained
 
+###### Screenshot
+![Screenshot](assets/screenshots/fork1.png)
+![Screenshot](assets/screenshots/fork2.png)
+
 ![Build Status](https://github.com/gnunn1/tilix/workflows/Build%20Test/badge.svg)
 [![Translation status](https://hosted.weblate.org/widgets/tilix/-/svg-badge.svg)](https://hosted.weblate.org/engage/tilix/?utm_source=widget)
 # Tilix
