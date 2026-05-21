@@ -1274,7 +1274,7 @@ private:
 
     // Clear bell pending state and optionally fade/stop bell sound when terminal gains focus
     void clearBellPending() {
-        if (!_bellPending && !_bellPlayer.isPlaying() && !_lblBellMsg.getVisible() && !spBell.getVisible()) return;
+        if (!_bellPending && !_bellPlayer.isPlaying() && !_lblBellMsg.getVisible()) return;
         _bellPending = false;
         if (spBell.getVisible()) {
             spBell.stop();

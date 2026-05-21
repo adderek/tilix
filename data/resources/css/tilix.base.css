@@ -145,6 +145,16 @@ revealer.right > scrolledwindow {
     animation: shake 1s linear infinite;
 }
 
+@keyframes tilix-bell-msg-pulse {
+    0%   { opacity: 1.0; }
+    50%  { opacity: 0.35; }
+    100% { opacity: 1.0; }
+}
+
+.tilix-bell-msg {
+    animation: tilix-bell-msg-pulse 1.4s ease-in-out infinite;
+}
+
 /* New Button in new UI */
 .session-new-button {
   padding-left: 2px;
