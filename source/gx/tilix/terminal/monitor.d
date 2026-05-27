@@ -97,7 +97,7 @@ public:
         synchronized {
             if (gpid in processes) {
                 processes.remove(gpid);
-                if (running && processes.length == 0) stop();
+                if (running && (cast() processes).length == 0) stop();
             }
         }
     }

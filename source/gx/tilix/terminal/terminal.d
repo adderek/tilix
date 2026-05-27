@@ -315,6 +315,7 @@ private:
         bool collapsed = false;
     }
     FoldSection[string] _folds;
+    FoldSection[] _foldHistory;
 
     // Track when the last activity was
     long lastActivity;
@@ -1414,6 +1415,12 @@ private:
             }
         }
         if (id.length == 0) return;
+        // Archive existing fold to history before overwriting
+        if (id in _folds) {
+            auto existing = _folds[id];
+            if (existing.endRow >= 0)
+                _foldHistory ~= existing;
+        }
         FoldSection s;
         s.id        = id;
         s.title     = title;
@@ -1447,11 +1454,23 @@ private:
     }
 
     /** Toggle a fold section collapsed/expanded. Called from external UI (e.g. mouse click). */
-    void toggleFold(string id) {
-        if (id !in _folds) return;
-        bool newState = !_folds[id].collapsed;
-        _folds[id].collapsed = newState;
-        vte.tilixSetFoldState(id, newState);
+    void toggleFold(string id, long headerRow) {
+        // Check _folds by id + headerRow
+        if (id in _folds && _folds[id].headerRow == headerRow) {
+            bool newState = !_folds[id].collapsed;
+            _folds[id].collapsed = newState;
+            vte.tilixSetFoldState(id, headerRow, newState);
+            return;
+        }
+        // Check _foldHistory by id + headerRow
+        foreach (i, ref fold; _foldHistory) {
+            if (fold.id == id && fold.headerRow == headerRow) {
+                bool newState = !fold.collapsed;
+                fold.collapsed = newState;
+                vte.tilixSetFoldState(id, headerRow, newState);
+                return;
+            }
+        }
     }
 
     /**
@@ -2186,6 +2205,26 @@ private:
                     dragBegin(list, GdkDragAction.MOVE, MouseButton.PRIMARY, event);
                     return true;
                 } else {
+                    // Check if click is on a fold header row (any state)
+                    if (_folds.length > 0 || _foldHistory.length > 0) {
+                        auto row = vte.tilixRowAtY(cast(int)event.button.y);
+                        if (row >= 0) {
+                            foreach (id, fold; _folds) {
+                                if (fold.endRow >= 0 && fold.headerRow == row) {
+                                    tracef("Toggle fold %s at row %s", id, row);
+                                    toggleFold(id, row);
+                                    return true;
+                                }
+                            }
+                            foreach (fold; _foldHistory) {
+                                if (fold.endRow >= 0 && fold.headerRow == row) {
+                                    tracef("Toggle history fold %s at row %s", fold.id, row);
+                                    toggleFold(fold.id, row);
+                                    return true;
+                                }
+                            }
+                        }
+                    }
                     return false;
                 }
             case MouseButton.SECONDARY:

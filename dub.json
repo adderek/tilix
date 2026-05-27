@@ -11,6 +11,9 @@
         },
         "gtk-d:vte": {
             "version": "3.11.0"
+        },
+        "gtk-d:gstreamer": {
+            "version": "3.11.0"
         }
     },
     "buildTypes": {

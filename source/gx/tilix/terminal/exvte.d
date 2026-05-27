@@ -227,10 +227,9 @@ public:
 	}
 
 	/** Toggle a fold section collapsed/expanded via the C API. */
-	void tilixSetFoldState(string foldId, bool collapsed)
-	{
+	void tilixSetFoldState(string foldId, long headerRow, bool collapsed) {
 		import std.string : toStringz;
-		vte_terminal_tilix_set_fold_state(vteTerminal, foldId.toStringz, collapsed ? 1 : 0);
+		vte_terminal_tilix_set_fold_state(vteTerminal, foldId.toStringz, headerRow, collapsed ? 1 : 0);
 	}
 
 	protected class OnNotificationReceivedDelegateWrapper
@@ -379,6 +378,15 @@ static if (COMPILE_VTE_BACKGROUND_COLOR) {
         	return tcgetpgrp(getPty().getFd());
 		}
     }
+
+    /**
+     * Returns the absolute terminal row at the given pixel Y coordinate,
+     * accounting for folded (hidden) rows.
+     * Returns -1 on error.
+     */
+    long tilixRowAtY(int y) {
+        return c_vte_terminal_tilix_row_at_y(vteTerminal, y);
+    }
 }
 
 private:
@@ -389,7 +397,8 @@ import vte.c.functions;
 __gshared extern(C) {
 	int function(VteTerminal* terminal) c_vte_terminal_get_disable_bg_draw;
 	void function(VteTerminal* terminal, int isAudible) c_vte_terminal_set_disable_bg_draw;
-	void function(VteTerminal* terminal, const(char)* fold_id, int collapsed) c_vte_terminal_tilix_set_fold_state;
+	void function(VteTerminal* terminal, const(char)* fold_id, long header_row, int collapsed) c_vte_terminal_tilix_set_fold_state;
+	long function(VteTerminal* terminal, int y) c_vte_terminal_tilix_row_at_y;
 
 	static if (COMPILE_VTE_BACKGROUND_COLOR) {
 		void function(VteTerminal* terminal, GdkRGBA* color) c_vte_terminal_get_color_background_for_draw;
@@ -399,6 +408,7 @@ __gshared extern(C) {
 alias vte_terminal_get_disable_bg_draw = c_vte_terminal_get_disable_bg_draw;
 alias vte_terminal_set_disable_bg_draw = c_vte_terminal_set_disable_bg_draw;
 alias vte_terminal_tilix_set_fold_state = c_vte_terminal_tilix_set_fold_state;
+alias vte_terminal_tilix_row_at_y = c_vte_terminal_tilix_row_at_y;
 
 static if (COMPILE_VTE_BACKGROUND_COLOR) {
 	alias vte_terminal_get_color_background_for_draw = c_vte_terminal_get_color_background_for_draw;
@@ -408,6 +418,7 @@ shared static this() {
 	Linker.link(vte_terminal_get_disable_bg_draw, "vte_terminal_get_disable_bg_draw", LIBRARY_VTE);
 	Linker.link(vte_terminal_set_disable_bg_draw, "vte_terminal_set_disable_bg_draw", LIBRARY_VTE);
 	Linker.link(vte_terminal_tilix_set_fold_state, "vte_terminal_tilix_set_fold_state", LIBRARY_VTE);
+	Linker.link(vte_terminal_tilix_row_at_y, "vte_terminal_tilix_row_at_y", LIBRARY_VTE);
 
 	static if (COMPILE_VTE_BACKGROUND_COLOR) {
 		Linker.link(vte_terminal_get_color_background_for_draw, "vte_terminal_get_color_background_for_draw", LIBRARY_VTE);
