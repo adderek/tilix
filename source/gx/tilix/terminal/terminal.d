@@ -305,6 +305,17 @@ private:
     // OSC 777 tilix-bell message badge (title bar label)
     Label _lblBellMsg;
 
+    // Foldable section tracking (tilix-fold-start / tilix-fold-end)
+    struct FoldSection {
+        string id;
+        string title;
+        string summary;
+        long headerRow = -1;
+        long endRow    = -1;
+        bool collapsed = false;
+    }
+    FoldSection[string] _folds;
+
     // Track when the last activity was
     long lastActivity;
     long silenceThreshold;
@@ -941,6 +952,14 @@ private:
             }
         });
 
+        vte.addOnTilixFoldStart(delegate(string params, VTE term) {
+            onTilixFoldStart(params);
+        });
+
+        vte.addOnTilixFoldEnd(delegate(string params, VTE term) {
+            onTilixFoldEnd(params);
+        });
+
         vteHandlers ~= vte.addOnWindowTitleChanged(delegate(VTE terminal) {
             if (vte !is null) {
                 trace("Window title changed");
@@ -1372,6 +1391,67 @@ private:
         if (msg.length > 0 && !_isFocused && gsProfile.getBoolean(SETTINGS_PROFILE_OSC777_SYSTEM_NOTIFY_KEY)) {
             notifyProcessNotification(format("[%s]", level), msg, uuid);
         }
+    }
+
+    // Handle OSC 777 ; tilix-fold-start ; params BEL
+    // params format: "id=X;title=Y;state=Z;row=N"
+    void onTilixFoldStart(string params) {
+        import std.conv : to;
+        string id, title;
+        bool collapsed = false;
+        long row = -1;
+        foreach (part; params.split(";")) {
+            auto idx = part.indexOf("=");
+            if (idx < 0) continue;
+            string key = part[0 .. idx];
+            string val = part[idx + 1 .. $];
+            switch (key) {
+                case "id":    id = val;    break;
+                case "title": title = val; break;
+                case "state": collapsed = (val == "1"); break;
+                case "row":   try { row = val.to!long; } catch (Exception) {} break;
+                default: break;
+            }
+        }
+        if (id.length == 0) return;
+        FoldSection s;
+        s.id        = id;
+        s.title     = title;
+        s.headerRow = row;
+        s.collapsed = collapsed;
+        s.endRow    = -1;
+        _folds[id] = s;
+    }
+
+    // Handle OSC 777 ; tilix-fold-end ; params BEL
+    // params format: "id=X;summary=Y;row=N"
+    void onTilixFoldEnd(string params) {
+        import std.conv : to;
+        string id, summary;
+        long row = -1;
+        foreach (part; params.split(";")) {
+            auto idx = part.indexOf("=");
+            if (idx < 0) continue;
+            string key = part[0 .. idx];
+            string val = part[idx + 1 .. $];
+            switch (key) {
+                case "id":      id = val;      break;
+                case "summary": summary = val; break;
+                case "row":     try { row = val.to!long; } catch (Exception) {} break;
+                default: break;
+            }
+        }
+        if (id.length == 0 || id !in _folds) return;
+        _folds[id].endRow  = row;
+        _folds[id].summary = summary;
+    }
+
+    /** Toggle a fold section collapsed/expanded. Called from external UI (e.g. mouse click). */
+    void toggleFold(string id) {
+        if (id !in _folds) return;
+        bool newState = !_folds[id].collapsed;
+        _folds[id].collapsed = newState;
+        vte.tilixSetFoldState(id, newState);
     }
 
     /**

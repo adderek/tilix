@@ -118,6 +118,121 @@ public:
 		}
 	}
 
+	protected class OnTilixFoldStartDelegateWrapper
+	{
+		void delegate(string, Terminal) dlg;
+		gulong handlerId;
+		ConnectFlags flags;
+		this(void delegate(string, Terminal) dlg, gulong handlerId, ConnectFlags flags)
+		{
+			this.dlg = dlg;
+			this.handlerId = handlerId;
+			this.flags = flags;
+		}
+	}
+	protected OnTilixFoldStartDelegateWrapper[] onTilixFoldStartListeners;
+
+	/**
+	 * Emitted when OSC 777 ; tilix-fold-start ; params BEL is received.
+	 * params format: "id=X;title=Y;state=Z;row=N"
+	 */
+	gulong addOnTilixFoldStart(void delegate(string, Terminal) dlg, ConnectFlags connectFlags=cast(ConnectFlags)0)
+	{
+		onTilixFoldStartListeners ~= new OnTilixFoldStartDelegateWrapper(dlg, 0, connectFlags);
+		onTilixFoldStartListeners[onTilixFoldStartListeners.length - 1].handlerId = Signals.connectData(
+			this,
+			"tilix-fold-start",
+			cast(GCallback)&callBackTilixFoldStart,
+			cast(void*)onTilixFoldStartListeners[onTilixFoldStartListeners.length - 1],
+			cast(GClosureNotify)&callBackTilixFoldStartDestroy,
+			connectFlags);
+		return onTilixFoldStartListeners[onTilixFoldStartListeners.length - 1].handlerId;
+	}
+
+	extern(C) static void callBackTilixFoldStart(VteTerminal* terminalStruct, char* params, OnTilixFoldStartDelegateWrapper wrapper)
+	{
+		wrapper.dlg(Str.toString(params), wrapper.outer);
+	}
+
+	extern(C) static void callBackTilixFoldStartDestroy(OnTilixFoldStartDelegateWrapper wrapper, GClosure* closure)
+	{
+		wrapper.outer.internalRemoveOnTilixFoldStart(wrapper);
+	}
+
+	protected void internalRemoveOnTilixFoldStart(OnTilixFoldStartDelegateWrapper source)
+	{
+		foreach(index, wrapper; onTilixFoldStartListeners)
+		{
+			if (wrapper.dlg == source.dlg && wrapper.flags == source.flags && wrapper.handlerId == source.handlerId)
+			{
+				onTilixFoldStartListeners[index] = null;
+				onTilixFoldStartListeners = std.algorithm.remove(onTilixFoldStartListeners, index);
+				break;
+			}
+		}
+	}
+
+	protected class OnTilixFoldEndDelegateWrapper
+	{
+		void delegate(string, Terminal) dlg;
+		gulong handlerId;
+		ConnectFlags flags;
+		this(void delegate(string, Terminal) dlg, gulong handlerId, ConnectFlags flags)
+		{
+			this.dlg = dlg;
+			this.handlerId = handlerId;
+			this.flags = flags;
+		}
+	}
+	protected OnTilixFoldEndDelegateWrapper[] onTilixFoldEndListeners;
+
+	/**
+	 * Emitted when OSC 777 ; tilix-fold-end ; params BEL is received.
+	 * params format: "id=X;summary=Y;row=N"
+	 */
+	gulong addOnTilixFoldEnd(void delegate(string, Terminal) dlg, ConnectFlags connectFlags=cast(ConnectFlags)0)
+	{
+		onTilixFoldEndListeners ~= new OnTilixFoldEndDelegateWrapper(dlg, 0, connectFlags);
+		onTilixFoldEndListeners[onTilixFoldEndListeners.length - 1].handlerId = Signals.connectData(
+			this,
+			"tilix-fold-end",
+			cast(GCallback)&callBackTilixFoldEnd,
+			cast(void*)onTilixFoldEndListeners[onTilixFoldEndListeners.length - 1],
+			cast(GClosureNotify)&callBackTilixFoldEndDestroy,
+			connectFlags);
+		return onTilixFoldEndListeners[onTilixFoldEndListeners.length - 1].handlerId;
+	}
+
+	extern(C) static void callBackTilixFoldEnd(VteTerminal* terminalStruct, char* params, OnTilixFoldEndDelegateWrapper wrapper)
+	{
+		wrapper.dlg(Str.toString(params), wrapper.outer);
+	}
+
+	extern(C) static void callBackTilixFoldEndDestroy(OnTilixFoldEndDelegateWrapper wrapper, GClosure* closure)
+	{
+		wrapper.outer.internalRemoveOnTilixFoldEnd(wrapper);
+	}
+
+	protected void internalRemoveOnTilixFoldEnd(OnTilixFoldEndDelegateWrapper source)
+	{
+		foreach(index, wrapper; onTilixFoldEndListeners)
+		{
+			if (wrapper.dlg == source.dlg && wrapper.flags == source.flags && wrapper.handlerId == source.handlerId)
+			{
+				onTilixFoldEndListeners[index] = null;
+				onTilixFoldEndListeners = std.algorithm.remove(onTilixFoldEndListeners, index);
+				break;
+			}
+		}
+	}
+
+	/** Toggle a fold section collapsed/expanded via the C API. */
+	void tilixSetFoldState(string foldId, bool collapsed)
+	{
+		import std.string : toStringz;
+		vte_terminal_tilix_set_fold_state(vteTerminal, foldId.toStringz, collapsed ? 1 : 0);
+	}
+
 	protected class OnNotificationReceivedDelegateWrapper
 	{
 		void delegate(string, string, Terminal) dlg;
@@ -274,6 +389,7 @@ import vte.c.functions;
 __gshared extern(C) {
 	int function(VteTerminal* terminal) c_vte_terminal_get_disable_bg_draw;
 	void function(VteTerminal* terminal, int isAudible) c_vte_terminal_set_disable_bg_draw;
+	void function(VteTerminal* terminal, const(char)* fold_id, int collapsed) c_vte_terminal_tilix_set_fold_state;
 
 	static if (COMPILE_VTE_BACKGROUND_COLOR) {
 		void function(VteTerminal* terminal, GdkRGBA* color) c_vte_terminal_get_color_background_for_draw;
@@ -282,6 +398,7 @@ __gshared extern(C) {
 
 alias vte_terminal_get_disable_bg_draw = c_vte_terminal_get_disable_bg_draw;
 alias vte_terminal_set_disable_bg_draw = c_vte_terminal_set_disable_bg_draw;
+alias vte_terminal_tilix_set_fold_state = c_vte_terminal_tilix_set_fold_state;
 
 static if (COMPILE_VTE_BACKGROUND_COLOR) {
 	alias vte_terminal_get_color_background_for_draw = c_vte_terminal_get_color_background_for_draw;
@@ -290,6 +407,7 @@ static if (COMPILE_VTE_BACKGROUND_COLOR) {
 shared static this() {
 	Linker.link(vte_terminal_get_disable_bg_draw, "vte_terminal_get_disable_bg_draw", LIBRARY_VTE);
 	Linker.link(vte_terminal_set_disable_bg_draw, "vte_terminal_set_disable_bg_draw", LIBRARY_VTE);
+	Linker.link(vte_terminal_tilix_set_fold_state, "vte_terminal_tilix_set_fold_state", LIBRARY_VTE);
 
 	static if (COMPILE_VTE_BACKGROUND_COLOR) {
 		Linker.link(vte_terminal_get_color_background_for_draw, "vte_terminal_get_color_background_for_draw", LIBRARY_VTE);
