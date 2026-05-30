@@ -180,3 +180,8 @@ revealer.right > scrolledwindow {
 .tilix-error {
     color: @error_color;
 }
+
+.tilix-terminal-title {
+    font-family: "Fira Code", "monospace";
+}
+

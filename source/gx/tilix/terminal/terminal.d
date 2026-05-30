@@ -310,12 +310,14 @@ private:
         string id;
         string title;
         string summary;
+        string group;
         long headerRow = -1;
         long endRow    = -1;
         bool collapsed = false;
     }
     FoldSection[string] _folds;
     FoldSection[] _foldHistory;
+    string[string] _groupLatest;  // group name → id of latest (currently unfolded) fold
 
     // Track when the last activity was
     long lastActivity;
@@ -1395,11 +1397,14 @@ private:
     }
 
     // Handle OSC 777 ; tilix-fold-start ; params BEL
-    // params format: "id=X;title=Y;state=Z;row=N"
+    // params format: "id=X;title=Y;state=Z;group=G;row=N"
+    // If group=G is set: new fold starts unfolded and the previous latest fold
+    // in that group is collapsed; other folds in the group keep their state.
     void onTilixFoldStart(string params) {
         import std.conv : to;
-        string id, title;
+        string id, title, group;
         bool collapsed = false;
+        bool hasState = false;
         long row = -1;
         foreach (part; params.split(";")) {
             auto idx = part.indexOf("=");
@@ -1409,7 +1414,8 @@ private:
             switch (key) {
                 case "id":    id = val;    break;
                 case "title": title = val; break;
-                case "state": collapsed = (val == "1"); break;
+                case "state": collapsed = (val == "1"); hasState = true; break;
+                case "group": group = val; break;
                 case "row":   try { row = val.to!long; } catch (Exception) {} break;
                 default: break;
             }
@@ -1421,9 +1427,22 @@ private:
             if (existing.endRow >= 0)
                 _foldHistory ~= existing;
         }
+        // Group semantics: collapse previous latest, new fold starts unfolded
+        if (group.length > 0 && !hasState) {
+            collapsed = false;
+            if (group in _groupLatest) {
+                string prevId = _groupLatest[group];
+                if (prevId != id && prevId in _folds) {
+                    _folds[prevId].collapsed = true;
+                    vte.tilixSetFoldState(prevId, _folds[prevId].headerRow, true);
+                }
+            }
+            _groupLatest[group] = id;
+        }
         FoldSection s;
         s.id        = id;
         s.title     = title;
+        s.group     = group;
         s.headerRow = row;
         s.collapsed = collapsed;
         s.endRow    = -1;
@@ -2205,8 +2224,9 @@ private:
                     dragBegin(list, GdkDragAction.MOVE, MouseButton.PRIMARY, event);
                     return true;
                 } else {
-                    // Check if click is on a fold header row (any state)
-                    if (_folds.length > 0 || _foldHistory.length > 0) {
+                    // Check if click is on the fold triangle (column 0) of a fold header row
+                    if ((_folds.length > 0 || _foldHistory.length > 0) &&
+                            event.button.x < vte.getCharWidth()) {
                         auto row = vte.tilixRowAtY(cast(int)event.button.y);
                         if (row >= 0) {
                             foreach (id, fold; _folds) {
