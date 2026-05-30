@@ -1068,6 +1068,7 @@ private:
         }, GConnectFlags.AFTER);
 
         vteHandlers ~= vte.addOnButtonPress(&onTerminalButtonPress);
+
         vteHandlers ~= vte.addOnKeyRelease(delegate(Event event, Widget widget) {
             if (vte is null) return false;
 
@@ -2224,9 +2225,9 @@ private:
                     dragBegin(list, GdkDragAction.MOVE, MouseButton.PRIMARY, event);
                     return true;
                 } else {
-                    // Check if click is on the fold triangle (column 0) of a fold header row
+                    // Check if click is on the fold triangle (first 2 columns) of a fold header row
                     if ((_folds.length > 0 || _foldHistory.length > 0) &&
-                            event.button.x < vte.getCharWidth()) {
+                            event.button.x < 2 * vte.getCharWidth()) {
                         auto row = vte.tilixRowAtY(cast(int)event.button.y);
                         if (row >= 0) {
                             foreach (id, fold; _folds) {
