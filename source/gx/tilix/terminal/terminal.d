@@ -319,6 +319,9 @@ private:
     FoldSection[] _foldHistory;
     string[string] _groupLatest;  // group name → id of latest (currently unfolded) fold
 
+    // Fold diagnostic log — lazy-opened on first fold event
+    File _foldDiagLog;
+
     // Track when the last activity was
     long lastActivity;
     long silenceThreshold;
@@ -765,6 +768,8 @@ private:
         //SaveAs
         registerActionWithSettings(group, ACTION_PREFIX, ACTION_SAVE, gsShortcuts, delegate(GVariant state, SimpleAction sa) { saveTerminalOutput(); }, null, null);
 
+        registerAction(group, ACTION_PREFIX, ACTION_REPORT_ISSUE, null, delegate(GVariant, SimpleAction) { reportTerminalIssue(); });
+
         //Edit Profile Preference
         registerActionWithSettings(group, ACTION_PREFIX, ACTION_PROFILE_PREFERENCE, gsShortcuts, delegate(GVariant, SimpleAction) {
             tilix.presentProfilePreferences(prfMgr.getProfile(_activeProfileUUID));
@@ -884,6 +889,7 @@ private:
         menuSection.append(_("Save Output…"), getActionDetailedName(ACTION_PREFIX, ACTION_SAVE));
         menuSection.append(_("Reset"), getActionDetailedName(ACTION_PREFIX, ACTION_RESET));
         menuSection.append(_("Reset and Clear"), getActionDetailedName(ACTION_PREFIX, ACTION_RESET_AND_CLEAR));
+        menuSection.append(_("Report Issue…"), getActionDetailedName(ACTION_PREFIX, ACTION_REPORT_ISSUE));
         submenu.appendSection(null, menuSection);
 
         menuSection = new GMenu();
@@ -1397,6 +1403,71 @@ private:
         }
     }
 
+    // Ensure fold diagnostic log is open; return true on success.
+    bool ensureFoldDiagLog() {
+        if (_foldDiagLog.isOpen()) return true;
+        import std.file  : mkdirRecurse;
+        import std.path  : buildPath, expandTilde;
+        try {
+            string dir = expandTilde("~/.local/share/tilix/fold-diagnostics");
+            mkdirRecurse(dir);
+            string path = buildPath(dir, _terminalUUID ~ ".log");
+            _foldDiagLog = File(path, "a");
+            import std.datetime.systime : Clock;
+            _foldDiagLog.writefln("# Tilix Fold Diagnostics | session=%s | pid=%s",
+                                  _terminalUUID, thisProcessID());
+            _foldDiagLog.writefln("# Opened: %s", Clock.currTime.toISOExtString());
+            _foldDiagLog.flush();
+            return true;
+        } catch (Exception e) {
+            warningf("fold diag log open failed: %s", e.msg);
+            return false;
+        }
+    }
+
+    void writeFoldDiagStart(FoldSection fold) {
+        if (!ensureFoldDiagLog()) return;
+        import std.datetime.systime : Clock;
+        try {
+            _foldDiagLog.writefln("FOLD_START | time=%s | id=%s | title=%s | headerRow=%s",
+                                  Clock.currTime.toISOExtString(), fold.id, fold.title, fold.headerRow);
+            _foldDiagLog.flush();
+        } catch (Exception) {}
+    }
+
+    void writeFoldDiagEnd(FoldSection fold) {
+        if (!ensureFoldDiagLog()) return;
+        import std.datetime.systime : Clock;
+        try {
+            bool isEmpty = fold.endRow <= fold.headerRow;
+            _foldDiagLog.writefln("FOLD_END   | time=%s | id=%s | headerRow=%s | endRow=%s | empty=%s | summary=%s",
+                                  Clock.currTime.toISOExtString(), fold.id, fold.headerRow,
+                                  fold.endRow, isEmpty, fold.summary);
+            // Capture content
+            _foldDiagLog.writefln("CONTENT_BEGIN | id=%s", fold.id);
+            if (!isEmpty && fold.endRow > fold.headerRow) {
+                try {
+                    ArrayG attr = new ArrayG(false, false, 16);
+                    long cols = vte.getColumnCount();
+                    string content = vte.getTextRange(fold.headerRow + 1, 0,
+                                                      fold.endRow, cols - 1,
+                                                      null, null, attr);
+                    if (content.length > 0)
+                        _foldDiagLog.write(content);
+                    else
+                        _foldDiagLog.writeln("(no text captured)");
+                } catch (Exception ce) {
+                    _foldDiagLog.writefln("(capture error: %s)", ce.msg);
+                }
+            } else {
+                _foldDiagLog.writeln("(empty fold)");
+            }
+            _foldDiagLog.writeln("CONTENT_END");
+            _foldDiagLog.writeln();
+            _foldDiagLog.flush();
+        } catch (Exception) {}
+    }
+
     // Handle OSC 777 ; tilix-fold-start ; params BEL
     // params format: "id=X;title=Y;state=Z;group=G;row=N"
     // If group=G is set: new fold starts unfolded and the previous latest fold
@@ -1448,6 +1519,7 @@ private:
         s.collapsed = collapsed;
         s.endRow    = -1;
         _folds[id] = s;
+        writeFoldDiagStart(s);
     }
 
     // Handle OSC 777 ; tilix-fold-end ; params BEL
@@ -1471,6 +1543,7 @@ private:
         if (id.length == 0 || id !in _folds) return;
         _folds[id].endRow  = row;
         _folds[id].summary = summary;
+        writeFoldDiagEnd(_folds[id]);
     }
 
     /** Toggle a fold section collapsed/expanded. Called from external UI (e.g. mouse click). */
@@ -2231,14 +2304,14 @@ private:
                         auto row = vte.tilixRowAtY(cast(int)event.button.y);
                         if (row >= 0) {
                             foreach (id, fold; _folds) {
-                                if (fold.endRow >= 0 && fold.headerRow == row) {
+                                if (fold.endRow >= 0 && fold.endRow > fold.headerRow && fold.headerRow == row) {
                                     tracef("Toggle fold %s at row %s", id, row);
                                     toggleFold(id, row);
                                     return true;
                                 }
                             }
                             foreach (fold; _foldHistory) {
-                                if (fold.endRow >= 0 && fold.headerRow == row) {
+                                if (fold.endRow >= 0 && fold.endRow > fold.headerRow && fold.headerRow == row) {
                                     tracef("Toggle history fold %s at row %s", fold.id, row);
                                     toggleFold(fold.id, row);
                                     return true;
@@ -4033,6 +4106,97 @@ private:
             stream.close(null);
         }
         vte.writeContentsSync(stream, VteWriteFlags.DEFAULT, null);
+    }
+
+    void reportTerminalIssue() {
+        import std.file : mkdirRecurse, write, readText, exists, getSize;
+        import std.path : buildPath, expandTilde;
+        import std.datetime : Clock, SysTime;
+        import VteVersion = vte.Version;
+
+        SysTime now = Clock.currTime();
+        string ts = format("%04d%02d%02d-%02d%02d%02d",
+            now.year, cast(int)now.month, now.day,
+            now.hour, now.minute, now.second);
+        string dir = buildPath("/tmp", "tilix-issue-" ~ ts);
+        mkdirRecurse(dir);
+
+        // --- info.txt ---
+        string info;
+        info ~= format("timestamp=%s\n", now.toISOExtString());
+        info ~= format("vte_major=%d\nvte_minor=%d\nvte_micro=%d\n",
+            VteVersion.Version.getMajorVersion(),
+            VteVersion.Version.getMinorVersion(),
+            VteVersion.Version.getMicroVersion());
+        info ~= format("physical_rows=%d\nphysical_cols=%d\n",
+            vte.getRowCount(), vte.getColumnCount());
+        info ~= format("gtk_major=%d\ngtk_minor=%d\ngtk_micro=%d\n",
+            Version.getMajorVersion(), Version.getMinorVersion(), Version.getMicroVersion());
+        info ~= format("display_server=%s\n",
+            isWayland(cast(Window) getToplevel()) ? "wayland" : "x11");
+        write(buildPath(dir, "info.txt"), info);
+
+        // --- vte_fold_state.txt ---
+        write(buildPath(dir, "vte_fold_state.txt"), vte.tilixGetFoldDebugInfo());
+
+        // --- fold_sections.txt ---
+        string foldState;
+        foldState ~= format("active_folds=%d\nhistory_folds=%d\n\n", _folds.length, _foldHistory.length);
+        foreach (id, fold; _folds) {
+            foldState ~= format("[fold:%s]\ntitle=%s\ngroup=%s\nheader_row=%d\nend_row=%d\ncollapsed=%d\n\n",
+                fold.id, fold.title, fold.group, fold.headerRow, fold.endRow, fold.collapsed ? 1 : 0);
+        }
+        if (_foldHistory.length > 0) {
+            foldState ~= "[history]\n";
+            foreach (fold; _foldHistory) {
+                foldState ~= format("id=%s title=%s header=%d end=%d collapsed=%d\n",
+                    fold.id, fold.title, fold.headerRow, fold.endRow, fold.collapsed ? 1 : 0);
+            }
+        }
+        write(buildPath(dir, "fold_sections.txt"), foldState);
+
+        // --- screen_text.txt ---
+        try {
+            import glib.ArrayG : ArrayG;
+            ArrayG attrs;
+            string screenText = vte.getText(null, null, attrs);
+            write(buildPath(dir, "screen_text.txt"), screenText);
+        } catch (Exception e) {
+            write(buildPath(dir, "screen_text.txt"), "capture failed: " ~ e.msg ~ "\n");
+        }
+
+        // --- fold_diag_tail.txt: last 100KB of diag log ---
+        string diagLogDir = expandTilde("~/.local/share/tilix/fold-diagnostics");
+        try {
+            import std.file : dirEntries, SpanMode, DirEntry;
+            import std.algorithm : sort, map;
+            import std.array : array;
+            DirEntry[] entries = dirEntries(diagLogDir, SpanMode.shallow).array;
+            if (entries.length > 0) {
+                entries.sort!((a, b) => a.name > b.name);
+                string logPath = entries[0].name;
+                ulong sz = getSize(logPath);
+                enum maxBytes = 100 * 1024;
+                File lf = File(logPath, "r");
+                scope(exit) lf.close();
+                if (sz > maxBytes) lf.seek(-maxBytes, SEEK_END);
+                write(buildPath(dir, "fold_diag_tail.txt"), lf.byChunk(4096).join());
+            }
+        } catch (Exception) {}
+
+        // --- show result dialog ---
+        Window window = cast(Window) getToplevel();
+        MessageDialog dlg = new MessageDialog(
+            window,
+            DialogFlags.MODAL | DialogFlags.DESTROY_WITH_PARENT,
+            MessageType.INFO,
+            ButtonsType.OK,
+            false,
+            null);
+        dlg.setMarkup(format(
+            "<b>Issue report saved.</b>\n\nAttach this folder to your bug report:\n<tt>%s</tt>", dir));
+        dlg.run();
+        dlg.destroy();
     }
 
 // Theme changed

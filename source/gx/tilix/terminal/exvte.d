@@ -387,6 +387,15 @@ static if (COMPILE_VTE_BACKGROUND_COLOR) {
     long tilixRowAtY(int y) {
         return c_vte_terminal_tilix_row_at_y(vteTerminal, y);
     }
+
+    string tilixGetFoldDebugInfo() {
+        import glib.c.functions : g_free;
+        char* raw = c_vte_terminal_tilix_get_fold_debug_info(vteTerminal);
+        if (raw is null) return "";
+        scope(exit) g_free(raw);
+        import std.string : fromStringz;
+        return fromStringz(raw).idup;
+    }
 }
 
 private:
@@ -399,6 +408,7 @@ __gshared extern(C) {
 	void function(VteTerminal* terminal, int isAudible) c_vte_terminal_set_disable_bg_draw;
 	void function(VteTerminal* terminal, const(char)* fold_id, long header_row, int collapsed) c_vte_terminal_tilix_set_fold_state;
 	long function(VteTerminal* terminal, int y) c_vte_terminal_tilix_row_at_y;
+	char* function(VteTerminal* terminal) c_vte_terminal_tilix_get_fold_debug_info;
 
 	static if (COMPILE_VTE_BACKGROUND_COLOR) {
 		void function(VteTerminal* terminal, GdkRGBA* color) c_vte_terminal_get_color_background_for_draw;
@@ -409,6 +419,7 @@ alias vte_terminal_get_disable_bg_draw = c_vte_terminal_get_disable_bg_draw;
 alias vte_terminal_set_disable_bg_draw = c_vte_terminal_set_disable_bg_draw;
 alias vte_terminal_tilix_set_fold_state = c_vte_terminal_tilix_set_fold_state;
 alias vte_terminal_tilix_row_at_y = c_vte_terminal_tilix_row_at_y;
+alias vte_terminal_tilix_get_fold_debug_info = c_vte_terminal_tilix_get_fold_debug_info;
 
 static if (COMPILE_VTE_BACKGROUND_COLOR) {
 	alias vte_terminal_get_color_background_for_draw = c_vte_terminal_get_color_background_for_draw;
@@ -419,6 +430,7 @@ shared static this() {
 	Linker.link(vte_terminal_set_disable_bg_draw, "vte_terminal_set_disable_bg_draw", LIBRARY_VTE);
 	Linker.link(vte_terminal_tilix_set_fold_state, "vte_terminal_tilix_set_fold_state", LIBRARY_VTE);
 	Linker.link(vte_terminal_tilix_row_at_y, "vte_terminal_tilix_row_at_y", LIBRARY_VTE);
+	Linker.link(vte_terminal_tilix_get_fold_debug_info, "vte_terminal_tilix_get_fold_debug_info", LIBRARY_VTE);
 
 	static if (COMPILE_VTE_BACKGROUND_COLOR) {
 		Linker.link(vte_terminal_get_color_background_for_draw, "vte_terminal_get_color_background_for_draw", LIBRARY_VTE);
