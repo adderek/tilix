@@ -2298,9 +2298,9 @@ private:
                     dragBegin(list, GdkDragAction.MOVE, MouseButton.PRIMARY, event);
                     return true;
                 } else {
-                    // Check if click is on the fold triangle (first 2 columns) of a fold header row
+                    // Check if click is on the fold toggle area (first 3 columns: level digit + up-to-2-wide symbol)
                     if ((_folds.length > 0 || _foldHistory.length > 0) &&
-                            event.button.x < 2 * vte.getCharWidth()) {
+                            event.button.x < 3 * vte.getCharWidth()) {
                         auto row = vte.tilixRowAtY(cast(int)event.button.y);
                         if (row >= 0) {
                             foreach (id, fold; _folds) {
