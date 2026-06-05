@@ -306,14 +306,18 @@ private:
     Label _lblBellMsg;
 
     // Foldable section tracking (tilix-fold-start / tilix-fold-end)
+    enum FoldStatus { none, success, warning, error_ }
+
     struct FoldSection {
         string id;
         string title;
         string summary;
         string group;
+        string[] tags;
         long headerRow = -1;
         long endRow    = -1;
         bool collapsed = false;
+        FoldStatus status = FoldStatus.none;
     }
     FoldSection[string] _folds;
     FoldSection[] _foldHistory;
@@ -1440,9 +1444,9 @@ private:
         import std.datetime.systime : Clock;
         try {
             bool isEmpty = fold.endRow <= fold.headerRow;
-            _foldDiagLog.writefln("FOLD_END   | time=%s | id=%s | headerRow=%s | endRow=%s | empty=%s | summary=%s",
+            _foldDiagLog.writefln("FOLD_END   | time=%s | id=%s | headerRow=%s | endRow=%s | empty=%s | summary=%s | status=%s | tags=%s",
                                   Clock.currTime.toISOExtString(), fold.id, fold.headerRow,
-                                  fold.endRow, isEmpty, fold.summary);
+                                  fold.endRow, isEmpty, fold.summary, fold.status, fold.tags.join(","));
             // Capture content
             _foldDiagLog.writefln("CONTENT_BEGIN | id=%s", fold.id);
             if (!isEmpty && fold.endRow > fold.headerRow) {
@@ -1469,14 +1473,13 @@ private:
     }
 
     // Handle OSC 777 ; tilix-fold-start ; params BEL
-    // params format: "id=X;title=Y;state=Z;group=G;row=N"
+    // params format: "id=X;title=Y;group=G;row=N"
+    // state= is ignored: folds always start expanded; collapse is decided at fold-end or by user.
     // If group=G is set: new fold starts unfolded and the previous latest fold
     // in that group is collapsed; other folds in the group keep their state.
     void onTilixFoldStart(string params) {
         import std.conv : to;
         string id, title, group;
-        bool collapsed = false;
-        bool hasState = false;
         long row = -1;
         foreach (part; params.split(";")) {
             auto idx = part.indexOf("=");
@@ -1486,7 +1489,6 @@ private:
             switch (key) {
                 case "id":    id = val;    break;
                 case "title": title = val; break;
-                case "state": collapsed = (val == "1"); hasState = true; break;
                 case "group": group = val; break;
                 case "row":   try { row = val.to!long; } catch (Exception) {} break;
                 default: break;
@@ -1500,13 +1502,23 @@ private:
                 _foldHistory ~= existing;
         }
         // Group semantics: collapse previous latest, new fold starts unfolded
-        if (group.length > 0 && !hasState) {
-            collapsed = false;
+        if (group.length > 0) {
             if (group in _groupLatest) {
                 string prevId = _groupLatest[group];
-                if (prevId != id && prevId in _folds) {
-                    _folds[prevId].collapsed = true;
-                    vte.tilixSetFoldState(prevId, _folds[prevId].headerRow, true);
+                if (prevId != id) {
+                    if (prevId in _folds) {
+                        _folds[prevId].collapsed = true;
+                        vte.tilixSetFoldState(prevId, _folds[prevId].headerRow, true);
+                    } else {
+                        // prev fold may have been archived to history (ID reused)
+                        foreach (ref hfold; _foldHistory) {
+                            if (hfold.id == prevId && hfold.endRow >= 0 && !hfold.collapsed) {
+                                hfold.collapsed = true;
+                                vte.tilixSetFoldState(prevId, hfold.headerRow, true);
+                                break;
+                            }
+                        }
+                    }
                 }
             }
             _groupLatest[group] = id;
@@ -1516,7 +1528,7 @@ private:
         s.title     = title;
         s.group     = group;
         s.headerRow = row;
-        s.collapsed = collapsed;
+        s.collapsed = false;
         s.endRow    = -1;
         _folds[id] = s;
         writeFoldDiagStart(s);
@@ -1526,7 +1538,7 @@ private:
     // params format: "id=X;summary=Y;row=N"
     void onTilixFoldEnd(string params) {
         import std.conv : to;
-        string id, summary;
+        string id, summary, statusStr, tagsStr;
         long row = -1;
         foreach (part; params.split(";")) {
             auto idx = part.indexOf("=");
@@ -1534,8 +1546,10 @@ private:
             string key = part[0 .. idx];
             string val = part[idx + 1 .. $];
             switch (key) {
-                case "id":      id = val;      break;
-                case "summary": summary = val; break;
+                case "id":      id = val;         break;
+                case "summary": summary = val;    break;
+                case "status":  statusStr = val;  break;
+                case "tags":    tagsStr = val;    break;
                 case "row":     try { row = val.to!long; } catch (Exception) {} break;
                 default: break;
             }
@@ -1543,7 +1557,18 @@ private:
         if (id.length == 0 || id !in _folds) return;
         _folds[id].endRow  = row;
         _folds[id].summary = summary;
+        _folds[id].status  = parseFoldStatus(statusStr);
+        _folds[id].tags    = tagsStr.length > 0 ? tagsStr.split(",") : [];
         writeFoldDiagEnd(_folds[id]);
+    }
+
+    static FoldStatus parseFoldStatus(string s) {
+        switch (s) {
+            case "success": return FoldStatus.success;
+            case "warning": return FoldStatus.warning;
+            case "error":   return FoldStatus.error_;
+            default:        return FoldStatus.none;
+        }
     }
 
     /** Toggle a fold section collapsed/expanded. Called from external UI (e.g. mouse click). */
