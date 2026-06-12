@@ -2361,20 +2361,20 @@ private:
                     dragBegin(list, GdkDragAction.MOVE, MouseButton.PRIMARY, event);
                     return true;
                 } else {
-                    // Check if click is on the fold toggle area (first 3 columns: level digit + up-to-2-wide symbol)
-                    if ((_folds.length > 0 || _foldHistory.length > 0) &&
-                            event.button.x < 3 * vte.getCharWidth()) {
-                        auto row = vte.tilixRowAtY(cast(int)event.button.y);
+                    // Fold toggle click: VTE hit-tests the toggle area (first 3 columns
+                    // of a toggleable fold header), border-adjusted on the C side.
+                    if (_folds.length > 0 || _foldHistory.length > 0) {
+                        auto row = vte.tilixFoldHeaderAt(event.button.x, event.button.y);
                         if (row >= 0) {
                             foreach (id, fold; _folds) {
-                                if (fold.endRow >= 0 && fold.endRow > fold.headerRow && fold.headerRow == row) {
+                                if (fold.headerRow == row) {
                                     tracef("Toggle fold %s at row %s", id, row);
                                     toggleFold(id, row);
                                     return true;
                                 }
                             }
-                            foreach (fold; _foldHistory) {
-                                if (fold.endRow >= 0 && fold.endRow > fold.headerRow && fold.headerRow == row) {
+                            foreach_reverse (fold; _foldHistory) {
+                                if (fold.headerRow == row) {
                                     tracef("Toggle history fold %s at row %s", fold.id, row);
                                     toggleFold(fold.id, row);
                                     return true;
