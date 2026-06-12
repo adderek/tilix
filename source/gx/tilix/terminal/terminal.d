@@ -973,6 +973,12 @@ private:
             onTilixFoldEnd(params);
         });
 
+        vte.addOnTilixFoldsCleared(delegate(VTE term) {
+            _folds.clear();
+            _foldHistory.length = 0;
+            _groupLatest.clear();
+        });
+
         vteHandlers ~= vte.addOnWindowTitleChanged(delegate(VTE terminal) {
             if (vte !is null) {
                 trace("Window title changed");
@@ -1410,13 +1416,21 @@ private:
     // Ensure fold diagnostic log is open; return true on success.
     bool ensureFoldDiagLog() {
         if (_foldDiagLog.isOpen()) return true;
-        import std.file  : mkdirRecurse;
+        // Opt-in: only log when TILIX_FOLD_DIAG is set to a non-empty value
+        if (environment.get("TILIX_FOLD_DIAG", "").length == 0) return false;
+        import std.file  : mkdirRecurse, getSize;
         import std.path  : buildPath, expandTilde;
         try {
             string dir = expandTilde("~/.local/share/tilix/fold-diagnostics");
             mkdirRecurse(dir);
             string path = buildPath(dir, _terminalUUID ~ ".log");
-            _foldDiagLog = File(path, "a");
+            // Size cap: truncate if file exceeds 10 MB
+            enum maxLogSize = 10 * 1024 * 1024;
+            string openMode = "a";
+            try {
+                if (getSize(path) > maxLogSize) openMode = "w";
+            } catch (Exception) {}
+            _foldDiagLog = File(path, openMode);
             import std.datetime.systime : Clock;
             _foldDiagLog.writefln("# Tilix Fold Diagnostics | session=%s | pid=%s",
                                   _terminalUUID, thisProcessID());
@@ -1443,18 +1457,18 @@ private:
         if (!ensureFoldDiagLog()) return;
         import std.datetime.systime : Clock;
         try {
-            bool isEmpty = fold.endRow <= fold.headerRow;
+            bool isEmpty = fold.endRow <= fold.headerRow + 1;
             _foldDiagLog.writefln("FOLD_END   | time=%s | id=%s | headerRow=%s | endRow=%s | empty=%s | summary=%s | status=%s | tags=%s",
                                   Clock.currTime.toISOExtString(), fold.id, fold.headerRow,
                                   fold.endRow, isEmpty, fold.summary, fold.status, fold.tags.join(","));
             // Capture content
             _foldDiagLog.writefln("CONTENT_BEGIN | id=%s", fold.id);
-            if (!isEmpty && fold.endRow > fold.headerRow) {
+            if (!isEmpty) {
                 try {
                     ArrayG attr = new ArrayG(false, false, 16);
                     long cols = vte.getColumnCount();
                     string content = vte.getTextRange(fold.headerRow + 1, 0,
-                                                      fold.endRow, cols - 1,
+                                                      fold.endRow - 1, cols - 1,
                                                       null, null, attr);
                     if (content.length > 0)
                         _foldDiagLog.write(content);
@@ -1470,6 +1484,13 @@ private:
             _foldDiagLog.writeln();
             _foldDiagLog.flush();
         } catch (Exception) {}
+    }
+
+    // Append a finished fold to _foldHistory, capping at 1024 entries.
+    void archiveFold(FoldSection f) {
+        if (_foldHistory.length >= 1024)
+            _foldHistory = _foldHistory[1 .. $];
+        _foldHistory ~= f;
     }
 
     // Handle OSC 777 ; tilix-fold-start ; params BEL
@@ -1499,7 +1520,7 @@ private:
         if (id in _folds) {
             auto existing = _folds[id];
             if (existing.endRow >= 0)
-                _foldHistory ~= existing;
+                archiveFold(existing);
         }
         // Group semantics: collapse previous latest, new fold starts unfolded
         if (group.length > 0) {
@@ -1510,8 +1531,8 @@ private:
                         _folds[prevId].collapsed = true;
                         vte.tilixSetFoldState(prevId, _folds[prevId].headerRow, true);
                     } else {
-                        // prev fold may have been archived to history (ID reused)
-                        foreach (ref hfold; _foldHistory) {
+                        // prev fold may have been archived to history (ID reused); use newest match
+                        foreach_reverse (ref hfold; _foldHistory) {
                             if (hfold.id == prevId && hfold.endRow >= 0 && !hfold.collapsed) {
                                 hfold.collapsed = true;
                                 vte.tilixSetFoldState(prevId, hfold.headerRow, true);
@@ -1531,6 +1552,23 @@ private:
         s.collapsed = false;
         s.endRow    = -1;
         _folds[id] = s;
+        // Cap _folds at 2048: remove ended folds until length <= 1024
+        if (_folds.length > 2048) {
+            string[] toRemove;
+            foreach (fid, ref fold; _folds) {
+                if (fold.endRow >= 0) {
+                    toRemove ~= fid;
+                    if (_folds.length - toRemove.length <= 1024) break;
+                }
+            }
+            foreach (fid; toRemove) {
+                // Also remove matching _groupLatest entries
+                foreach (grp, gid; _groupLatest) {
+                    if (gid == fid) _groupLatest.remove(grp);
+                }
+                _folds.remove(fid);
+            }
+        }
         writeFoldDiagStart(s);
     }
 
@@ -4134,17 +4172,28 @@ private:
     }
 
     void reportTerminalIssue() {
+        import core.sys.posix.stdlib : mkdtemp;
         import std.file : mkdirRecurse, write, readText, exists, getSize;
         import std.path : buildPath, expandTilde;
         import std.datetime : Clock, SysTime;
+        import std.string : toStringz, fromStringz;
         import VteVersion = vte.Version;
 
+        // Use $XDG_RUNTIME_DIR if set, else ~/.cache/tilix as secure base
+        string xdgRuntime = environment.get("XDG_RUNTIME_DIR", "");
+        string baseDir = xdgRuntime.length > 0 ? xdgRuntime : expandTilde("~/.cache/tilix");
+        mkdirRecurse(baseDir);
+        // mkdtemp requires a NUL-terminated mutable char buffer
+        string tmpl = buildPath(baseDir, "tilix-issue-XXXXXX");
+        char[] buf = (tmpl ~ '\0').dup;
+        char* result = mkdtemp(buf.ptr);
+        if (result is null) {
+            warningf("reportTerminalIssue: mkdtemp failed");
+            return;
+        }
+        string dir = fromStringz(result).idup;
+
         SysTime now = Clock.currTime();
-        string ts = format("%04d%02d%02d-%02d%02d%02d",
-            now.year, cast(int)now.month, now.day,
-            now.hour, now.minute, now.second);
-        string dir = buildPath("/tmp", "tilix-issue-" ~ ts);
-        mkdirRecurse(dir);
 
         // --- info.txt ---
         string info;
@@ -4190,19 +4239,14 @@ private:
             write(buildPath(dir, "screen_text.txt"), "capture failed: " ~ e.msg ~ "\n");
         }
 
-        // --- fold_diag_tail.txt: last 100KB of diag log ---
+        // --- fold_diag_tail.txt: last 100KB of this terminal's diag log ---
         string diagLogDir = expandTilde("~/.local/share/tilix/fold-diagnostics");
+        string diagLogPath = buildPath(diagLogDir, _terminalUUID ~ ".log");
         try {
-            import std.file : dirEntries, SpanMode, DirEntry;
-            import std.algorithm : sort, map;
-            import std.array : array;
-            DirEntry[] entries = dirEntries(diagLogDir, SpanMode.shallow).array;
-            if (entries.length > 0) {
-                entries.sort!((a, b) => a.name > b.name);
-                string logPath = entries[0].name;
-                ulong sz = getSize(logPath);
+            if (exists(diagLogPath)) {
+                ulong sz = getSize(diagLogPath);
                 enum maxBytes = 100 * 1024;
-                File lf = File(logPath, "r");
+                File lf = File(diagLogPath, "r");
                 scope(exit) lf.close();
                 if (sz > maxBytes) lf.seek(-maxBytes, SEEK_END);
                 write(buildPath(dir, "fold_diag_tail.txt"), lf.byChunk(4096).join());

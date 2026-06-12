@@ -226,6 +226,59 @@ public:
 		}
 	}
 
+	protected class OnTilixFoldsClearedDelegateWrapper
+	{
+		void delegate(Terminal) dlg;
+		gulong handlerId;
+		ConnectFlags flags;
+		this(void delegate(Terminal) dlg, gulong handlerId, ConnectFlags flags)
+		{
+			this.dlg = dlg;
+			this.handlerId = handlerId;
+			this.flags = flags;
+		}
+	}
+	protected OnTilixFoldsClearedDelegateWrapper[] onTilixFoldsClearedListeners;
+
+	/**
+	 * Emitted when VTE drops all fold records (rewrap resize, hard reset).
+	 */
+	gulong addOnTilixFoldsCleared(void delegate(Terminal) dlg, ConnectFlags connectFlags=cast(ConnectFlags)0)
+	{
+		onTilixFoldsClearedListeners ~= new OnTilixFoldsClearedDelegateWrapper(dlg, 0, connectFlags);
+		onTilixFoldsClearedListeners[onTilixFoldsClearedListeners.length - 1].handlerId = Signals.connectData(
+			this,
+			"tilix-folds-cleared",
+			cast(GCallback)&callBackTilixFoldsCleared,
+			cast(void*)onTilixFoldsClearedListeners[onTilixFoldsClearedListeners.length - 1],
+			cast(GClosureNotify)&callBackTilixFoldsClearedDestroy,
+			connectFlags);
+		return onTilixFoldsClearedListeners[onTilixFoldsClearedListeners.length - 1].handlerId;
+	}
+
+	extern(C) static void callBackTilixFoldsCleared(VteTerminal* terminalStruct, OnTilixFoldsClearedDelegateWrapper wrapper)
+	{
+		wrapper.dlg(wrapper.outer);
+	}
+
+	extern(C) static void callBackTilixFoldsClearedDestroy(OnTilixFoldsClearedDelegateWrapper wrapper, GClosure* closure)
+	{
+		wrapper.outer.internalRemoveOnTilixFoldsCleared(wrapper);
+	}
+
+	protected void internalRemoveOnTilixFoldsCleared(OnTilixFoldsClearedDelegateWrapper source)
+	{
+		foreach(index, wrapper; onTilixFoldsClearedListeners)
+		{
+			if (wrapper.dlg == source.dlg && wrapper.flags == source.flags && wrapper.handlerId == source.handlerId)
+			{
+				onTilixFoldsClearedListeners[index] = null;
+				onTilixFoldsClearedListeners = std.algorithm.remove(onTilixFoldsClearedListeners, index);
+				break;
+			}
+		}
+	}
+
 	/** Toggle a fold section collapsed/expanded via the C API. */
 	void tilixSetFoldState(string foldId, long headerRow, bool collapsed) {
 		import std.string : toStringz;
