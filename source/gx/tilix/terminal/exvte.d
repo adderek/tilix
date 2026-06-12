@@ -450,6 +450,15 @@ static if (COMPILE_VTE_BACKGROUND_COLOR) {
         return c_vte_terminal_tilix_fold_header_at(vteTerminal, x, y);
     }
 
+    /**
+     * Hit-tests like tilixFoldHeaderAt and toggles the fold on a hit.
+     * VTE records are the source of truth (they survive rewrap resizes).
+     * Returns the toggled fold's absolute header row, or -1.
+     */
+    long tilixToggleFoldAt(double x, double y) {
+        return c_vte_terminal_tilix_toggle_fold_at(vteTerminal, x, y);
+    }
+
     string tilixGetFoldDebugInfo() {
         import glib.c.functions : g_free;
         char* raw = c_vte_terminal_tilix_get_fold_debug_info(vteTerminal);
@@ -471,6 +480,7 @@ __gshared extern(C) {
 	void function(VteTerminal* terminal, const(char)* fold_id, long header_row, int collapsed) c_vte_terminal_tilix_set_fold_state;
 	long function(VteTerminal* terminal, int y) c_vte_terminal_tilix_row_at_y;
 	long function(VteTerminal* terminal, double x, double y) c_vte_terminal_tilix_fold_header_at;
+	long function(VteTerminal* terminal, double x, double y) c_vte_terminal_tilix_toggle_fold_at;
 	char* function(VteTerminal* terminal) c_vte_terminal_tilix_get_fold_debug_info;
 
 	static if (COMPILE_VTE_BACKGROUND_COLOR) {
@@ -483,6 +493,7 @@ alias vte_terminal_set_disable_bg_draw = c_vte_terminal_set_disable_bg_draw;
 alias vte_terminal_tilix_set_fold_state = c_vte_terminal_tilix_set_fold_state;
 alias vte_terminal_tilix_row_at_y = c_vte_terminal_tilix_row_at_y;
 alias vte_terminal_tilix_fold_header_at = c_vte_terminal_tilix_fold_header_at;
+alias vte_terminal_tilix_toggle_fold_at = c_vte_terminal_tilix_toggle_fold_at;
 alias vte_terminal_tilix_get_fold_debug_info = c_vte_terminal_tilix_get_fold_debug_info;
 
 static if (COMPILE_VTE_BACKGROUND_COLOR) {
@@ -495,6 +506,7 @@ shared static this() {
 	Linker.link(vte_terminal_tilix_set_fold_state, "vte_terminal_tilix_set_fold_state", LIBRARY_VTE);
 	Linker.link(vte_terminal_tilix_row_at_y, "vte_terminal_tilix_row_at_y", LIBRARY_VTE);
 	Linker.link(vte_terminal_tilix_fold_header_at, "vte_terminal_tilix_fold_header_at", LIBRARY_VTE);
+	Linker.link(vte_terminal_tilix_toggle_fold_at, "vte_terminal_tilix_toggle_fold_at", LIBRARY_VTE);
 	Linker.link(vte_terminal_tilix_get_fold_debug_info, "vte_terminal_tilix_get_fold_debug_info", LIBRARY_VTE);
 
 	static if (COMPILE_VTE_BACKGROUND_COLOR) {

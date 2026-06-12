@@ -1609,26 +1609,6 @@ private:
         }
     }
 
-    /** Toggle a fold section collapsed/expanded. Called from external UI (e.g. mouse click). */
-    void toggleFold(string id, long headerRow) {
-        // Check _folds by id + headerRow
-        if (id in _folds && _folds[id].headerRow == headerRow) {
-            bool newState = !_folds[id].collapsed;
-            _folds[id].collapsed = newState;
-            vte.tilixSetFoldState(id, headerRow, newState);
-            return;
-        }
-        // Check _foldHistory by id + headerRow
-        foreach (i, ref fold; _foldHistory) {
-            if (fold.id == id && fold.headerRow == headerRow) {
-                bool newState = !fold.collapsed;
-                fold.collapsed = newState;
-                vte.tilixSetFoldState(id, headerRow, newState);
-                return;
-            }
-        }
-    }
-
     /**
      * Check automatic profile switch and make switch if necessary
      */
@@ -2361,26 +2341,29 @@ private:
                     dragBegin(list, GdkDragAction.MOVE, MouseButton.PRIMARY, event);
                     return true;
                 } else {
-                    // Fold toggle click: VTE hit-tests the toggle area (first 3 columns
-                    // of a toggleable fold header), border-adjusted on the C side.
-                    if (_folds.length > 0 || _foldHistory.length > 0) {
-                        auto row = vte.tilixFoldHeaderAt(event.button.x, event.button.y);
-                        if (row >= 0) {
-                            foreach (id, fold; _folds) {
-                                if (fold.headerRow == row) {
-                                    tracef("Toggle fold %s at row %s", id, row);
-                                    toggleFold(id, row);
-                                    return true;
-                                }
+                    // Fold toggle click: VTE owns hit-test and toggle (its records
+                    // survive rewrap resizes that clear the D-side mirror).
+                    auto row = vte.tilixToggleFoldAt(event.button.x, event.button.y);
+                    if (row >= 0) {
+                        tracef("Toggled fold at row %s", row);
+                        // Best-effort: keep the D mirror's collapsed flag in sync.
+                        bool synced = false;
+                        foreach (id, ref fold; _folds) {
+                            if (fold.headerRow == row) {
+                                fold.collapsed = !fold.collapsed;
+                                synced = true;
+                                break;
                             }
-                            foreach_reverse (fold; _foldHistory) {
+                        }
+                        if (!synced) {
+                            foreach_reverse (ref fold; _foldHistory) {
                                 if (fold.headerRow == row) {
-                                    tracef("Toggle history fold %s at row %s", fold.id, row);
-                                    toggleFold(fold.id, row);
-                                    return true;
+                                    fold.collapsed = !fold.collapsed;
+                                    break;
                                 }
                             }
                         }
+                        return true;
                     }
                     return false;
                 }
