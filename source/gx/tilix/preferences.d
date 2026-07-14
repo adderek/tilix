@@ -148,6 +148,7 @@ enum SETTINGS_ADVANCED_PASTE_REPLACE_CRLF_KEY = "advanced-paste-replace-crlf";
 enum SETTINGS_USE_TABS_KEY = "use-tabs";
 enum SETTINGS_TAB_POSITION_KEY = "tab-position";
 immutable string[] SETTINGS_TAB_POSITION_VALUES = ["left", "right", "top", "bottom"];
+enum SETTINGS_TAB_TITLE_LEAD_CHARS_KEY = "tab-title-lead-chars";
 immutable string[] SETTINGS_QUAKE_WINDOW_POSITION_VALUES = ["top", "bottom"];
 
 enum SETTINGS_PROCESS_MONITOR = "process-monitor";

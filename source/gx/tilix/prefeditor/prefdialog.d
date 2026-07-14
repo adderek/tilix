@@ -1196,6 +1196,14 @@ class AppearancePreferences: Box {
             grid.attach(cbTabPosition, 1, row, 1, 1);
             row++;
 
+            //Number of leading characters kept when a tab title is truncated
+            grid.attach(createLabel(_("Tab title leading characters")), 0, row, 1, 1);
+            SpinButton sbTabLead = new SpinButton(0, 20, 1);
+            sbTabLead.setTooltipText(_("Leading characters always shown before the ellipsis when a tab title is truncated (0 shows only the trailing part)"));
+            bh.bind(SETTINGS_TAB_TITLE_LEAD_CHARS_KEY, sbTabLead, "value", GSettingsBindFlags.DEFAULT);
+            grid.attach(sbTabLead, 1, row, 1, 1);
+            row++;
+
             //Dark Theme
             grid.attach(createLabel(_("Theme variant")), 0, row, 1, 1);
             ComboBox cbThemeVariant = createNameValueCombo([_("Default"), _("Light"), _("Dark")], SETTINGS_THEME_VARIANT_VALUES);

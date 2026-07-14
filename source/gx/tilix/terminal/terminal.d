@@ -29,6 +29,7 @@ import std.stdio;
 import std.string;
 import std.traits;
 import std.typecons;
+import std.uni : graphemeStride;
 import std.uuid;
 
 import cairo.Context;
@@ -222,6 +223,8 @@ private:
 
     Box bTitle;
     MenuButton mbTitle;
+    Label lblTitleLead;
+    Box bTitleText;
     Label lblTitle;
     ToggleButton tbSyncInput;
     Spinner spBell;
@@ -374,10 +377,24 @@ private:
         bTitle.setNoShowAll(true);
         bTitle.setVexpand(false);
 
+        // Leading part kept visible before the ellipsis when the title is too
+        // wide; sits adjacent to lblTitle with no gap so a wide title renders
+        // as "<lead>…<tail>". See updateTitle/setSplitTitle.
+        lblTitleLead = new Label("");
+        lblTitleLead.getStyleContext().addClass("tilix-terminal-title");
+        lblTitleLead.setUseMarkup(true);
+
         lblTitle = new Label(_("Terminal"));
         lblTitle.getStyleContext().addClass("tilix-terminal-title");
         lblTitle.setEllipsize(PangoEllipsizeMode.START);
         lblTitle.setUseMarkup(true);
+        // Left-align so a short tail hugs the lead (e.g. "C"+"laude" -> "Claude")
+        // instead of centering in the wide allocation -> "C     laude".
+        lblTitle.setXalign(0.0);
+
+        bTitleText = new Box(Orientation.HORIZONTAL, 0);
+        bTitleText.add(lblTitleLead);
+        bTitleText.add(lblTitle);
 
         //Profile Menu
         profileMenu = new GMenu();
@@ -386,7 +403,7 @@ private:
         encodingMenu = new GMenu();
 
         Box bTitleLabel = new Box(Orientation.HORIZONTAL, 6);
-        bTitleLabel.add(lblTitle);
+        bTitleLabel.add(bTitleText);
         bTitleLabel.add(new Image("pan-down-symbolic", IconSize.MENU));
 
         mbTitle = new MenuButton();
@@ -1653,13 +1670,34 @@ private:
     }
 
     /**
+     * Splits the (markup) title into a leading part kept visible and an
+     * ellipsized remainder, mirroring the tab-title behaviour. The leading
+     * part holds the first N grapheme clusters where N comes from the
+     * tab-title-lead-chars setting. If the title contains Pango markup tags
+     * (a '<'), splitting could cut a tag, so the whole title is left in
+     * lblTitle and no leading part is shown.
+     */
+    void setSplitTitle(string title) {
+        int leadCount = gsSettings.getInt(SETTINGS_TAB_TITLE_LEAD_CHARS_KEY);
+        size_t idx = 0;
+        if (leadCount > 0 && title.indexOf('<') < 0) {
+            foreach (_; 0 .. leadCount) {
+                if (idx >= title.length) break;
+                idx += graphemeStride(title, idx);
+            }
+        }
+        lblTitleLead.setMarkup(title[0 .. idx]);
+        lblTitle.setMarkup(title[idx .. $]);
+    }
+
+    /**
      * Updates the terminal title and the application title in response to UI changes
      */
     void updateTitle() {
         string title = _overrideTitle.length == 0 ? gsProfile.getString(SETTINGS_PROFILE_TITLE_KEY) : _overrideTitle;
         title = getDisplayText(title);
         if (title != lastTitle) {
-            lblTitle.setMarkup(title);
+            setSplitTitle(title);
             lastTitle = title;
         }
         // Need to always emit title since other titles could be tracking variables that terminal isn't
@@ -2804,6 +2842,9 @@ private:
                 bTitle.getStyleContext().removeClass("compact");
             }
             updateTitleBar();
+            break;
+        case SETTINGS_TAB_TITLE_LEAD_CHARS_KEY:
+            if (lastTitle.length > 0) setSplitTitle(lastTitle);
             break;
         case SETTINGS_TERMINAL_TITLE_SHOW_WHEN_SINGLE_KEY:
             updateTitleBar();

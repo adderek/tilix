@@ -537,6 +537,12 @@
       <summary>The position where the tabs are displayed</summary>
       <description>Determines where the tabs are displayed relative to the notebook.</description>
     </key>
+    <key name="tab-title-lead-chars" type="i">
+      <range min="0" max="20"/>
+      <default>3</default>
+      <summary>Leading characters kept when a tab title is truncated</summary>
+      <description>Number of leading characters (grapheme clusters, e.g. an emoji prefix) always kept visible before the ellipsis when a tab title is too wide to fit. The trailing part fills the remaining space. Set to 0 to only show the trailing part.</description>
+    </key>
   </schema>
 
   <!-- SettingsList base schema -->

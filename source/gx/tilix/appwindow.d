@@ -16,6 +16,7 @@ import std.json;
 import std.path;
 import std.process;
 import std.string;
+import std.uni : graphemeStride;
 import std.uuid;
 
 import cairo.Context;
@@ -2100,9 +2101,13 @@ private:
 	Button button;
     EventBox evNotifications;
     AspectFrame afNotifications;
+	Label lblLead;
+	Box txtBox;
 	Label lblText;
     Label lblNotifications;
 	Session session;
+	GSettings gsTabSettings;
+	string fullTitle;
     Image imgNewOutput;
     EventBox lblBox;
     Entry lblEditBox;
@@ -2110,6 +2115,23 @@ private:
 
     enum PAGE_LABEL = "label";
     enum PAGE_EDIT = "edit";
+
+    // Split a title into a fixed leading part (first N grapheme clusters, N
+    // taken from the tab-title-lead-chars setting) and the remainder. The
+    // leading part stays visible while the remainder is ellipsized from the
+    // start, so a wide title renders as "<lead>…<tail>". N == 0 disables the
+    // leading part entirely.
+    void splitTitle(string value) {
+        fullTitle = value;
+        int leadCount = gsTabSettings is null ? 3 : gsTabSettings.getInt(SETTINGS_TAB_TITLE_LEAD_CHARS_KEY);
+        size_t idx = 0;
+        foreach (_; 0 .. leadCount) {
+            if (idx >= value.length) break;
+            idx += graphemeStride(value, idx);
+        }
+        lblLead.setText(value[0 .. idx]);
+        lblText.setText(value[idx .. $]);
+    }
 
 	void closeClicked(Button button) {
 		onCloseClicked.emit(session);
@@ -2139,15 +2161,39 @@ public:
 
         stTitle = new Stack();
 
-		lblText = new Label(text);
+		gsTabSettings = new GSettings(SETTINGS_ID);
+		gsTabSettings.addOnChanged(delegate(string key, GSettings) {
+			if (key == SETTINGS_TAB_TITLE_LEAD_CHARS_KEY) splitTitle(fullTitle);
+		});
+		addOnDestroy(delegate(Widget) {
+			if (gsTabSettings !is null) {
+				gsTabSettings.destroy();
+				gsTabSettings = null;
+			}
+		});
+
+		lblLead = new Label("");
+
+		lblText = new Label("");
         lblText.setEllipsize(PangoEllipsizeMode.START);
-		lblText.setWidthChars(10);
+		lblText.setWidthChars(8);
+        // left-align so the tail hugs the lead instead of centering in the
+        // expanded allocation (which left a gap: "<lead>      <tail>")
+        lblText.setXalign(0);
+
+        // leading part + ellipsized remainder sit adjacent with no gap, so a
+        // wide title renders as "<lead>…<tail>" instead of just "…<tail>"
+        txtBox = new Box(Orientation.HORIZONTAL, 0);
+        txtBox.add(lblLead);
+        txtBox.add(lblText);
+
+        splitTitle(text);
         updatePositionType(position);
 
 
         // double clicking the EventBox will hide the EventBox and show the lblEditBox
         lblBox = new EventBox();
-        lblBox.add(lblText);
+        lblBox.add(txtBox);
         lblBox.addOnButtonPress(delegate(Event event, Widget w) {
             if (event.getEventType() == EventType.DOUBLE_BUTTON_PRESS && event.button.button == MouseButton.PRIMARY) {
                 lblEditBox.setText(session.name());
@@ -2220,11 +2266,11 @@ public:
     }
 
 	@property string text() {
-		return lblText.getText();
+		return lblLead.getText() ~ lblText.getText();
 	}
 
 	@property void text(string value) {
-		lblText.setText(value);
+		splitTitle(value);
 	}
 
     @property bool showNewOutput() {
@@ -2255,12 +2301,21 @@ public:
     void updatePositionType(PositionType position) {
         if (position == PositionType.LEFT || position == PositionType.RIGHT) {
             setOrientation(Orientation.VERTICAL);
-            lblText.setAngle(position==PositionType.LEFT?90:270);
+            txtBox.setOrientation(Orientation.VERTICAL);
+            int angle = position==PositionType.LEFT?90:270;
+            lblLead.setAngle(angle);
+            lblText.setAngle(angle);
+            lblLead.setHexpand(false);
+            lblLead.setVexpand(false);
             lblText.setHexpand(false);
             lblText.setVexpand(true);
         } else {
             setOrientation(Orientation.HORIZONTAL);
+            txtBox.setOrientation(Orientation.HORIZONTAL);
+            lblLead.setAngle(0);
             lblText.setAngle(0);
+            lblLead.setHexpand(false);
+            lblLead.setVexpand(false);
             lblText.setHexpand(true);
             lblText.setVexpand(false);
         }
